@@ -1,73 +1,52 @@
-/**
- * src/pages/Analyze.tsx — Audio file upload and deepfake analysis
- */
-import React, { useState, useEffect } from 'react';
-import { useOrganization } from '@/context/OrganizationContext';
-import { useAlertContext } from '@/context/AlertContext';
-import { useSignalSettings } from '@/context/SignalSettingsContext';
-import { analyzeCall } from '@/services/api';
-import { RiskGauge } from '@/components/risk/RiskGauge';
-import { SignalBreakdown } from '@/components/risk/SignalBreakdown';
-import { RiskBandBadge } from '@/components/risk/RiskBandBadge';
-import { LoadingState } from '@/components/ui/LoadingState';
-import { ErrorState } from '@/components/ui/ErrorState';
-import type { AnalysisResponse } from '@/types';
-import { FileAudio, CheckCircle2, RotateCcw } from 'lucide-react';
-import { UploadDoneIcon } from '@/components/ui/AnimatedIcons';
+
+import { useState, type ChangeEvent } from 'react';
+import {
+  FileAudio,
+  CheckCircle2,
+  RotateCcw,
+  ShieldCheck,
+  ShieldAlert,
+  Clock3,
+} from 'lucide-react';
+
+import {
+  analyzeWithDetectif,
+  type DetectifResponse,
+} from '@/services/api';
 
 export function Analyze() {
-  const { org } = useOrganization();
-  const { addToast } = useAlertContext();
-  const { fusion } = useSignalSettings();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalysisResponse | null>(null);
+  const [result, setResult] = useState<DetectifResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (result) {
-if (result.band === 'high' || result.band === 'critical') {
-        addToast({
-          type: result.band === 'critical' ? 'critical_risk' : 'high_risk',
-          title: result.band === 'critical' ? 'CRITICAL RISK' : 'HIGH RISK',
-          message: `Score: ${Math.round(result.risk_score ?? 0)}/100 · ${(result.confidence ?? 0).toFixed(2)} confidence`,
-          detail: `Analysis ${result.analysis_id} — ${result.band?.toUpperCase()} band`,
-          score: Math.round(result.risk_score ?? 0),
-          band: result.band ?? undefined,
-          action: result.recommended_action ?? undefined,
-        });
-      } else {
-        addToast({
-          type: 'info',
-          title: 'Analysis complete',
-          message: `${result.band?.toUpperCase() ?? 'NA'} risk — score ${Math.round(result.risk_score ?? 0)}/100`,
-          detail: result.recommended_action
-            ? `Recommended: ${result.recommended_action}`
-            : `Analysis ${result.analysis_id}`,
-          score: Math.round(result.risk_score ?? 0),
-          band: result.band ?? undefined,
-        });
-      }
-    }
-  }, [result, addToast]);
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-      setResult(null);
-      setError(null);
+    if (selected.size > 25 * 1024 * 1024) {
+      setError('File exceeds the 25 MB upload limit.');
+      return;
     }
+
+    setFile(selected);
+    setResult(null);
+    setError(null);
   };
 
   const handleAnalyze = async () => {
     if (!file) return;
+
     setLoading(true);
     setError(null);
+
     try {
-      const res = await analyzeCall(file, org, null, fusion);
-      setResult(res);
-    } catch (err: any) {
-      setError(err?.message || 'Analysis failed.');
+      const response = await analyzeWithDetectif(file);
+      setResult(response);
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : 'Audio analysis failed.'
+      );
     } finally {
       setLoading(false);
     }
@@ -82,23 +61,27 @@ if (result.band === 'high' || result.band === 'critical') {
   return (
     <div className="space-y-5 max-w-5xl mx-auto">
       <div>
-        <h1 className="text-lg font-semibold text-[rgb(var(--text-primary))]">Analyze Audio</h1>
+        <h1 className="text-lg font-semibold text-[rgb(var(--text-primary))]">
+          Analyze Audio
+        </h1>
         <p className="text-xs text-[rgb(var(--text-muted))] mt-0.5">
-          Upload a voice clip to detect real vs. cloned speech
+          Analyze voice recordings for potentially AI-generated speech
         </p>
       </div>
 
-      {!result && !loading && (
+      {!result && (
         <div className="card p-8 flex flex-col items-center text-center">
-          <div className="w-12 h-12 rounded-xl bg-[rgb(var(--accent))] text-white flex items-center justify-center mb-5 shadow-md">
-            <UploadDoneIcon size={24} color="#fff" />
+          <div className="w-12 h-12 rounded-xl bg-[rgb(var(--accent))] text-white flex items-center justify-center mb-5">
+            <FileAudio size={24} />
           </div>
 
           <h3 className="text-sm font-semibold text-[rgb(var(--text-primary))] mb-1">
             Upload Call Recording
           </h3>
+
           <p className="text-xs text-[rgb(var(--text-muted))] max-w-xs mb-6">
-            WAV, MP3, FLAC, OGG up to 25MB. Audio is analyzed in memory and discarded.
+            Upload a speech recording for Aletheia deepfake analysis.
+            Maximum file size: 25 MB.
           </p>
 
           <input
@@ -110,63 +93,152 @@ if (result.band === 'high' || result.band === 'critical') {
           />
 
           {file ? (
-            <div className="p-2.5 rounded-md bg-[var(--hover-bg)] border border-[rgb(var(--border-subtle))] flex items-center gap-3 w-full max-w-sm">
-              <FileAudio className="w-4 h-4 text-[rgb(var(--accent-soft))] shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-medium text-[rgb(var(--text-primary))] block truncate">{file.name}</span>
-                <span className="text-[10px] font-mono text-[rgb(var(--text-muted))]">
+            <div className="p-3 rounded-md border border-[rgb(var(--border-subtle))] flex items-center gap-3 w-full max-w-sm">
+              <FileAudio className="w-4 h-4 shrink-0" />
+              <div className="flex-1 min-w-0 text-left">
+                <span className="text-xs font-medium block truncate">
+                  {file.name}
+                </span>
+                <span className="text-[10px]">
                   {(file.size / (1024 * 1024)).toFixed(2)} MB
                 </span>
               </div>
-              <button onClick={handleAnalyze} className="btn btn-primary btn-sm shrink-0">
-                Analyze
+              <button
+                onClick={handleAnalyze}
+                disabled={loading}
+                className="btn btn-primary btn-sm shrink-0"
+              >
+                {loading ? 'Analyzing...' : 'Analyze'}
               </button>
             </div>
           ) : (
-            <label htmlFor="audio-upload" className="btn btn-primary cursor-pointer mt-1">
-              <UploadDoneIcon size={16} /> Select File
+            <label
+              htmlFor="audio-upload"
+              className="btn btn-primary cursor-pointer"
+            >
+              Select Audio File
             </label>
+          )}
+
+          {loading && (
+            <p className="text-xs mt-5 text-[rgb(var(--text-muted))]">
+              Analyzing audio with Aletheia. This may take a few minutes...
+            </p>
+          )}
+
+          {error && (
+            <div className="mt-5 text-sm text-red-500">
+              {error}
+              <button
+                onClick={handleAnalyze}
+                className="underline ml-2"
+                disabled={!file || loading}
+              >
+                Retry
+              </button>
+            </div>
           )}
         </div>
       )}
 
-      {loading && <LoadingState message="Running inference..." />}
-
-      {error && <ErrorState message={error} onRetry={handleAnalyze} />}
-
       {result && (
         <div className="space-y-4">
           <div className="card p-3 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="w-4 h-4 text-[rgb(var(--accent))]" />
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
               <div>
-                <span className="text-xs font-medium text-[rgb(var(--text-primary))]">Analysis Complete</span>
-                <span className="text-[10px] font-mono text-[rgb(var(--text-muted))] ml-2">{result.analysis_id}</span>
+                <span className="text-xs font-medium block">
+                  Analysis Complete
+                </span>
+                <span className="text-[10px] text-[rgb(var(--text-muted))]">
+                  Request: {result.request_id}
+                </span>
               </div>
             </div>
             <button onClick={handleReset} className="btn btn-ghost btn-sm">
-              <RotateCcw className="w-3 h-3" /> New
+              <RotateCcw size={13} /> New Analysis
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="card flex flex-col items-center py-6">
-              <RiskGauge score={result.risk_score} band={result.band} size={200} />
-              <div className="mt-3 text-center">
-                <RiskBandBadge band={result.band} severity={result.severity} size="lg" />
-                <p className="text-[11px] text-[rgb(var(--text-muted))] mt-2 max-w-xs">
-                  {result.recommended_action || 'No escalation required'}
-                </p>
-              </div>
+          <div className="card p-6 text-center">
+            {result.result.is_synthetic ? (
+              <ShieldAlert className="w-12 h-12 text-red-500 mx-auto mb-3" />
+            ) : (
+              <ShieldCheck className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+            )}
+
+            <p className="text-xs text-[rgb(var(--text-muted))] uppercase">
+              Aletheia Detection Result
+            </p>
+            <h2 className={`text-2xl font-bold mt-2 ${
+              result.result.is_synthetic ? 'text-red-500' : 'text-emerald-500'
+            }`}>
+              {result.result.is_synthetic
+                ? 'AI-GENERATED AUDIO'
+                : 'GENUINE AUDIO'}
+            </h2>
+            <p className="text-xs text-[rgb(var(--text-muted))] mt-2">
+              Provider classification: {result.result.label}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="card p-5">
+              <p className="text-xs text-[rgb(var(--text-muted))]">
+                Detection score
+              </p>
+              <p className="text-2xl font-bold mt-2">
+                {(result.result.score * 100).toFixed(2)}%
+              </p>
             </div>
 
-            <div className="card">
-              <h3 className="text-sm font-semibold text-[rgb(var(--text-primary))] mb-3">
-                Signal Breakdown
-              </h3>
-              <SignalBreakdown signals={result.signals} />
+            <div className="card p-5">
+              <p className="text-xs text-[rgb(var(--text-muted))]">
+                Detection threshold
+              </p>
+              <p className="text-2xl font-bold mt-2">
+                {(result.result.threshold * 100).toFixed(2)}%
+              </p>
+            </div>
+
+            <div className="card p-5">
+              <p className="text-xs text-[rgb(var(--text-muted))]">
+                Audio duration
+              </p>
+              <p className="text-2xl font-bold mt-2">
+                {result.result.duration_seconds.toFixed(2)}s
+              </p>
             </div>
           </div>
+
+          <div className="card p-5 space-y-3 text-xs">
+            <h3 className="text-sm font-semibold">Analysis Details</h3>
+            <div className="flex justify-between">
+              <span>Classification</span>
+              <span>{result.result.label}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Synthetic audio</span>
+              <span>{String(result.result.is_synthetic)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Scored duration</span>
+              <span>{result.result.scored_seconds.toFixed(2)} seconds</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Operation ID</span>
+              <span className="truncate ml-4">{result.operation_id}</span>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-[rgb(var(--text-muted))] flex items-center gap-1">
+            <Clock3 size={12} />
+            Request ID: {result.request_id}
+          </p>
+          <p className="text-xs text-[rgb(var(--text-muted))]">
+            Automated detection is a signal, not proof of authenticity.
+            Do not use this result alone to authorize sensitive actions.
+          </p>
         </div>
       )}
     </div>

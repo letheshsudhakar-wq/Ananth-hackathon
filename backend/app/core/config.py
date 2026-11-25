@@ -34,10 +34,12 @@ class Settings(BaseSettings):
     # ── Database ───────────────────────────────────────────────────────────
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/voxdetect.db"
 
-    # ── ML Core ───────────────────────────────────────────────────────────
     MODEL_DEVICE: str = "cpu"
-    MODEL_CHECKPOINT: str | None = None  # path to fine-tuned checkpoint dir
+    MODEL_CHECKPOINT: str | None = None
 
+    # Detectif.ai integration
+    DETECTIF_API_KEY: str = ""
+    DETECTIF_BASE_URL: str = "https://platform.detectif.ai"
     # ── Organisation ──────────────────────────────────────────────────────
     DEFAULT_ORG: str = "enterprise"
 

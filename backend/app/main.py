@@ -32,6 +32,7 @@ from app.middleware.error_handler import (
 )
 from app.services.ml_service import MLService
 from app.services.organization_service import OrganizationService
+from app.api.v1 import detectif
 
 logger = get_logger(__name__)
 
@@ -121,6 +122,7 @@ def create_application() -> FastAPI:
     app.include_router(enrollment.router)
     app.include_router(alerts.router)
     app.include_router(streaming.router)
+    app.include_router(detectif.router)
 
     return app
 

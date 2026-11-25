@@ -158,3 +158,35 @@ export async function deleteSpeaker(speakerId: string): Promise<void> {
     throw normalizeError(err);
   }
 }
+export interface DetectifResponse {
+  request_id: string;
+  operation_id: string;
+  object: string;
+  result: {
+    label: string;
+    is_synthetic: boolean;
+    score: number;
+    threshold: number;
+    duration_seconds: number;
+    scored_seconds: number;
+  };
+}
+
+export async function analyzeWithDetectif(
+  audioFile: File
+): Promise<DetectifResponse> {
+  const formData = new FormData();
+  formData.append('file', audioFile);
+
+  try {
+    const res = await apiClient.post<DetectifResponse>(
+      '/v1/detectif/analyze',
+      formData,
+      { timeout: 300000 }
+    );
+
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
+  }
+}
