@@ -1,5 +1,5 @@
-/**
- * src/services/api.ts — Centralized API service layer.
+﻿/**
+ * src/services/api.ts â€” Centralized API service layer.
  * All backend HTTP calls go through this module.
  * Base URL is read from VITE_API_URL environment variable.
  */
@@ -24,7 +24,7 @@ export const apiClient = axios.create({
   timeout: 30000,
 });
 
-// ── Error normalizer ─────────────────────────────────────────────────
+// â”€â”€ Error normalizer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface ApiError {
   code: string;
   message: string;
@@ -59,7 +59,7 @@ function normalizeError(err: any): ApiError {
   return { code: 'UNKNOWN_ERROR', message: err?.message || 'An unexpected error occurred.', status: 0 };
 }
 
-// ── Health ────────────────────────────────────────────────────────────
+// â”€â”€ Health â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function getHealth(): Promise<HealthResponse> {
   try {
     const res = await apiClient.get<HealthResponse>('/v1/health');
@@ -78,7 +78,7 @@ export async function getBasicHealth(): Promise<HealthResponse> {
   }
 }
 
-// ── Analysis ──────────────────────────────────────────────────────────
+// â”€â”€ Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function analyzeCall(
   audioFile: File,
   org: OrgType,
@@ -105,7 +105,7 @@ export async function analyzeCall(
   }
 }
 
-// ── Alerts ────────────────────────────────────────────────────────────
+// â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export interface AlertsFilter {
   organization?: string;
   flagged?: boolean;
@@ -125,7 +125,7 @@ export async function getAlerts(filter: AlertsFilter = {}): Promise<AlertListRes
   }
 }
 
-// ── Enrollment ────────────────────────────────────────────────────────
+// â”€â”€ Enrollment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function enrollSpeaker(
   speakerId: string,
   name: string,
@@ -162,6 +162,7 @@ export async function deleteSpeaker(speakerId: string): Promise<void> {
   }
 }
 export interface DetectifResponse {
+  analysis_id?: string;
   request_id: string;
   operation_id: string;
   object: string;
@@ -203,6 +204,51 @@ export async function getProfile(): Promise<ProfileResponse> {
   }
 }
 
+export interface DetectifHistoryItem {
+  analysis_id: string;
+  request_id: string | null;
+  operation_id: string | null;
+  filename: string;
+  label: 'genuine' | 'synthetic';
+  is_synthetic: boolean;
+  score: number;
+  threshold: number;
+  duration_seconds: number;
+  scored_seconds: number;
+  created_at: string;
+}
+
+export interface DetectifHistoryResponse {
+  items: DetectifHistoryItem[];
+  limit: number;
+  offset: number;
+  returned: number;
+}
+
+export interface DetectifStats {
+  total: number;
+  synthetic_count: number;
+  genuine_count: number;
+  synthetic_percentage: number;
+  average_score: number | null;
+  latest_analysis_at: string | null;
+}
+
+export async function getDetectifHistory(
+  limit = 200,
+  offset = 0
+): Promise<DetectifHistoryResponse> {
+  try {
+    const res = await apiClient.get<DetectifHistoryResponse>(
+      '/v1/detectif/history',
+      { params: { limit, offset } }
+    );
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
+  }
+}
+
 export async function updateProfile(
   profile: Omit<ProfileResponse, 'id' | 'created_at' | 'updated_at'>
 ): Promise<ProfileResponse> {
@@ -214,6 +260,14 @@ export async function updateProfile(
   }
 }
 
+export async function getDetectifStats(): Promise<DetectifStats> {
+  try {
+    const res = await apiClient.get<DetectifStats>('/v1/detectif/stats');
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
+  }
+}
 export async function getAnalytics(
   days: number,
   organization?: string
