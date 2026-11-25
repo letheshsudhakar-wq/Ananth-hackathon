@@ -1,0 +1,112 @@
+{
+  "name": "ANANTH Multi-Agent Foundation Bridge Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth-agent-bridge",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ananth-agent-bridge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate incoming request fields before routing to Python backend\nconst body = $json.body || $json;\n\nif (!body.session_id || !body.caller_id) {\n  return [{\n    json: {\n      error: true,\n      code: 'MISSING_REQUIRED_FIELDS',\n      message: 'session_id and caller_id are mandatory fields'\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    session_id: String(body.session_id),\n    caller_id: String(body.caller_id),\n    action_risk: String(body.action_risk || 'MEDIUM').toUpperCase(),\n    agent_name: String(body.agent_name || 'orchestrator_agent'),\n    aletheia_liveness_score: body.aletheia_liveness_score !== undefined ? Number(body.aletheia_liveness_score) : null,\n    aletheia_confidence: body.aletheia_confidence !== undefined ? Number(body.aletheia_confidence) : 0.85,\n    eidos_match_score: body.eidos_match_score !== undefined ? Number(body.eidos_match_score) : null,\n    eidos_confidence: body.eidos_confidence !== undefined ? Number(body.eidos_confidence) : 0.85,\n    metadata: body.metadata || {}\n  }\n}];"
+      },
+      "id": "node-validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/v1/n8n/bridge",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-N8N-Secret",
+              "value": "ananth_internal_bridge_secret_demo"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "node-http-backend",
+      "name": "HTTP Request Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Backend": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

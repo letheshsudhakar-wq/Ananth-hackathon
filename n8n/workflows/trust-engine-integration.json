@@ -1,0 +1,103 @@
+{
+  "name": "ANANTH Trust Engine Integration (Phase 3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth/trust/evaluate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-trust-webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ananth-trust-engine-integration"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate trust payload. Evidence is treated as untrusted input by the backend.\nconst body = $json.body || $json;\nif (!body.session_id) {\n  return [{ json: { valid: false, status: 'ERROR', error: 'VALIDATION_ERROR', message: 'session_id is mandatory' } }];\n}\nconst risk = String(body.action_risk || 'MEDIUM').toUpperCase();\nif (!['LOW', 'MEDIUM', 'HIGH', 'FINANCIAL'].includes(risk)) {\n  return [{ json: { valid: false, status: 'ERROR', error: 'INVALID_RISK_TIER' } }];\n}\nreturn [{ json: { valid: true, ...body, action_risk: risk, session_id: String(body.session_id) } }];"
+      },
+      "id": "node-trust-validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "allSets": false },
+          "conditions": [
+            { "value1": "={{ $json.valid }}", "operation": "equal", "value2": true }
+          ]
+        }
+      },
+      "id": "node-trust-if",
+      "name": "IF Valid Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "node-trust-respond-invalid",
+      "name": "Respond Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://127.0.0.1:8000' }}/v1/n8n/trust",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_BRIDGE_SECRET || '' }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "node-trust-http",
+      "name": "Detectif AI and Trust Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "node-trust-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]] },
+    "Validate Input": { "main": [[{ "node": "IF Valid Request", "type": "main", "index": 0 }]] },
+    "IF Valid Request": {
+      "main": [
+        [{ "node": "Detectif AI and Trust Engine", "type": "main", "index": 0 }],
+        [{ "node": "Respond Invalid", "type": "main", "index": 0 }]
+      ]
+    },
+    "Detectif AI and Trust Engine": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" }
+}

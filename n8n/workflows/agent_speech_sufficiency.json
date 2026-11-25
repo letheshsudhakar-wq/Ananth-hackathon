@@ -1,0 +1,198 @@
+{
+  "name": "ANANTH Agent 1 - Speech Sufficiency",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth/agent/speech_sufficiency",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-ws-speech-sufficiency",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ananth-agent-speech-sufficiency"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate the Speech Sufficiency request before routing to the Python backend.\nconst body = $json.body || $json;\nif (!body.session_id) {\n  return [{ json: { status: 'ERROR', error: 'VALIDATION_ERROR', message: 'session_id is mandatory', agent_name: 'speech_sufficiency_agent' } }];\n}\nreturn [{\n  json: {\n    session_id: String(body.session_id),\n    accumulate: body.accumulate !== undefined ? !!body.accumulate : true,\n    min_speech_seconds: body.min_speech_seconds !== undefined ? Number(body.min_speech_seconds) : null,\n    audio_path: body.audio_path || null\n  }\n}];"
+      },
+      "id": "node-validate-speech-sufficiency",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://localhost:8000' }}/v1/agents/speech_sufficiency",
+        "authentication": "headerAuth",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ananth-agent-secret",
+            "name": "ANANTH Agent Secret"
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-http-speech-sufficiency",
+      "name": "HTTP Request Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "allSets": false
+          },
+          "conditions": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "equal",
+              "value2": "ERROR"
+            }
+          ]
+        }
+      },
+      "id": "node-if-speech-sufficiency",
+      "name": "IF status ERROR",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "followUpMessage",
+              "value": "={{ (\n  $json.status === 'WARNING' && $json.findings?.speech_sufficiency_status === 'INSUFFICIENT'\n    ? 'Please collect additional speech (' + ($json.findings?.deficit_seconds || 0) + 's more required).'\n    : 'Your recording could not be processed. Please try again.'\n) }}"
+            }
+          ],
+          "boolean": []
+        },
+        "options": {}
+      },
+      "id": "node-edit-speech-sufficiency",
+      "name": "Edit Fields Follow-up",
+      "type": "n8n-nodes-base.editFields",
+      "typeVersion": 2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-speech-sufficiency-error",
+      "name": "Respond to Webhook (Error)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-speech-sufficiency-ok",
+      "name": "Respond to Webhook (OK)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 380]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Backend": {
+      "main": [
+        [
+          {
+            "node": "IF status ERROR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF status ERROR": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (OK)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

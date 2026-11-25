@@ -34,6 +34,7 @@ from src.schemas import (
     AudioQualityStatus,
     NormalizedAletheiaEvidence,
     NormalizedEidosEvidence,
+    EvidenceStatus,
     ActionRiskLevel,
     VerificationStatus,
     TrustDecision,

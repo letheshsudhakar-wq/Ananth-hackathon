@@ -1,54 +1,85 @@
-import React, { useEffect, useRef, useState } from 'react';
+/**
+ * src/pages/VoiceVerification.tsx  (Phase 4 — real backend wiring)
+ * Collects audio (upload / record), runs full ANANTH orchestration,
+ * and shows live agent activity inline before navigating to results.
+ */
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, Mic, Trash2, Play, Square, RotateCcw, Loader2 } from 'lucide-react';
-import { analyzeCall } from '@/services/api';
-import { useOrganization } from '@/context/OrganizationContext';
-import { useSignalSettings } from '@/context/SignalSettingsContext';
+import {
+  UploadCloud, Mic, Square, RotateCcw, Trash2, Play, Loader2, Globe2,
+} from 'lucide-react';
+import { useOrchestration } from '@/hooks/useOrchestration';
+import { AgentActivityPanel } from '@/components/agents/AgentActivityPanel';
+import { RecoveryPanel } from '@/components/agents/RecoveryPanel';
 
 type Tab = 'upload' | 'record';
 
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'ta', label: 'Tamil' },
+  { value: 'kn', label: 'Kannada' },
+  { value: 'te', label: 'Telugu' },
+  { value: 'gu', label: 'Gujarati' },
+];
+
 export function VoiceVerification() {
   const navigate = useNavigate();
+  const { phase, result, recovery, agentStates, error, run, reset } = useOrchestration();
+
   const [tab, setTab] = useState<Tab>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState('');
+  const [language, setLanguage] = useState('en');
+  const [localError, setLocalError] = useState('');
+
+  // Recording state
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState('');
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [speakerId, setSpeakerId] = useState('');
-  const [referenceId, setReferenceId] = useState('');
-  const [country, setCountry] = useState('');
-  const [language, setLanguage] = useState('');
-  const { org } = useOrganization();
-  const { fusion } = useSignalSettings();
 
   useEffect(() => {
     if (!recording) return;
-    const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
-    return () => window.clearInterval(timer);
+    const t = window.setInterval(() => setSeconds((v) => v + 1), 1000);
+    return () => clearInterval(t);
   }, [recording]);
 
+  // Navigate to results when done
+  useEffect(() => {
+    if (phase === 'done' && result) {
+      sessionStorage.setItem('ananth-orch-result', JSON.stringify(result));
+      if (recovery) sessionStorage.setItem('ananth-recovery', JSON.stringify(recovery));
+      // Short delay so user sees agent panel complete
+      const t = setTimeout(() => navigate('/verification-results'), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [phase, result, recovery, navigate]);
+
   const startRecording = async () => {
-    setError('');
+    setLocalError('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const mr = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm',
+      });
       chunks.current = [];
-      mediaRecorder.ondataavailable = (event) => event.data.size && chunks.current.push(event.data);
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks.current, { type: 'audio/webm' });
+      mr.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
+      mr.onstop = () => {
+        const blob = new Blob(chunks.current, { type: mr.mimeType });
+        setRecordedBlob(blob);
         setRecordedUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach((track) => track.stop());
+        stream.getTracks().forEach((t) => t.stop());
       };
-      recorder.current = mediaRecorder;
-      mediaRecorder.start();
+      recorder.current = mr;
+      mr.start();
       setSeconds(0);
       setRecording(true);
     } catch {
-      setError('Microphone access was unavailable. You can still upload or link audio.');
+      setLocalError('Microphone access denied. Please upload a file instead.');
     }
   };
 
@@ -57,73 +88,189 @@ export function VoiceVerification() {
     setRecording(false);
   };
 
-  const verify = async () => {
-    if (tab === 'upload' && !file) return setError('Please upload an audio file.');
-    if (tab === 'record' && !recordedUrl) return setError('Please record audio before verification.');
-    setLoading(true);
-    setError('');
-    try {
-      let audioFile: File;
-      if (tab === 'upload' && file) {
-        audioFile = file;
-      } else {
-        const response = await fetch(recordedUrl);
-        const blob = await response.blob();
-        audioFile = new File([blob], 'microphone-recording.webm', { type: blob.type || 'audio/webm' });
-      }
-      const result = await analyzeCall(audioFile, org, {
-        first_time_contact: false,
-        high_value: false,
-        odd_hour: false,
-        sensitive_data_request: false,
-        enrolled_speaker_id: speakerId || null,
-      }, fusion);
-      sessionStorage.setItem('ananth-verification-source', tab === 'upload' ? audioFile.name : 'Microphone recording');
-      sessionStorage.setItem('ananth-verification-result', JSON.stringify(result));
-      sessionStorage.setItem('ananth-verification-details', JSON.stringify({ referenceId, country, language, speakerId }));
-      navigate('/audio-intelligence');
-    } catch (err: any) {
-      setError(err?.message || 'Voice verification failed.');
-    } finally {
-      setLoading(false);
+  const handleVerify = useCallback(async () => {
+    setLocalError('');
+    let blob: Blob | null = null;
+
+    if (tab === 'upload') {
+      if (!file) return setLocalError('Please upload an audio file.');
+      blob = file;
+    } else {
+      if (!recordedBlob) return setLocalError('Please record audio first.');
+      blob = recordedBlob;
     }
+
+    await run(blob, { language, useGemini: false });
+  }, [tab, file, recordedBlob, language, run]);
+
+  const handleReset = () => {
+    reset();
+    setFile(null);
+    setRecordedBlob(null);
+    setRecordedUrl('');
+    setSeconds(0);
+    setLocalError('');
   };
+
+  const isRunning = phase === 'uploading' || phase === 'processing';
+  const isDone = phase === 'done';
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
-      <div><h1 className="text-xl font-semibold">Voice Verification</h1><p className="text-sm text-[rgb(var(--text-muted))] mt-1">Upload or record audio for backend voice analysis.</p></div>
-      {error && <div className="rounded-lg border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</div>}
-      <div className="grid lg:grid-cols-[1fr_280px] gap-5">
+      <div>
+        <h1 className="text-xl font-semibold">Voice Verification</h1>
+        <p className="text-sm text-[rgb(var(--text-muted))] mt-1">
+          Upload or record an audio sample for multi-agent authentication.
+        </p>
+      </div>
+
+      {(localError || error) && (
+        <div className="rounded-lg border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+          {localError || error}
+        </div>
+      )}
+
+      <div className="grid lg:grid-cols-[1fr_320px] gap-5">
+        {/* Left: audio input */}
         <section className="card">
-          <div className="flex gap-2 border-b border-[rgb(var(--border-subtle))] pb-3">
-            {([['upload', UploadCloud, 'Upload Audio'], ['record', Mic, 'Record Audio']] as const).map(([value, Icon, label]) =>
-              <button key={value} onClick={() => setTab(value)} className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${tab === value ? 'bg-violet-600 text-white' : 'text-[rgb(var(--text-secondary))] hover:bg-[var(--hover-bg)]'}`}><Icon className="w-4 h-4" />{label}</button>)}
+          <div className="flex gap-2 border-b border-[rgb(var(--border-subtle))] pb-3 mb-5">
+            {(['upload', 'record'] as Tab[]).map((t) => (
+              <button
+                key={t}
+                disabled={isRunning || isDone}
+                onClick={() => setTab(t)}
+                className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50 ${
+                  tab === t
+                    ? 'bg-violet-600 text-white'
+                    : 'text-[rgb(var(--text-secondary))] hover:bg-[var(--hover-bg)]'
+                }`}
+              >
+                {t === 'upload' ? <UploadCloud className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                {t === 'upload' ? 'Upload Audio' : 'Record Audio'}
+              </button>
+            ))}
           </div>
-          <div className="pt-5">
-            {tab === 'upload' && (!file ? <label className="h-64 border border-dashed border-violet-400/30 rounded-xl flex flex-col items-center justify-center cursor-pointer bg-violet-500/5 hover:bg-violet-500/10">
-              <UploadCloud className="w-10 h-10 text-violet-400 mb-3" /><strong>Drop audio here or browse</strong><span className="text-xs text-[rgb(var(--text-muted))] mt-2">MP3, WAV, M4A or OGG</span><input className="hidden" type="file" accept=".mp3,.wav,.m4a,.ogg,audio/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-            </label> : <div className="h-64 flex flex-col items-center justify-center rounded-xl bg-[var(--hover-bg)]"><audio controls src={URL.createObjectURL(file)} className="w-[80%]" /><p className="mt-4 text-sm">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</p><button onClick={() => setFile(null)} className="btn btn-ghost mt-3"><Trash2 className="w-4 h-4" />Remove</button></div>)}
-            {tab === 'record' && <div className="h-64 flex flex-col items-center justify-center rounded-xl border border-violet-400/20 bg-violet-500/5">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center ${recording ? 'bg-red-500/25 text-red-300 animate-pulse' : 'bg-violet-500/20 text-violet-300'}`}><Mic className="w-9 h-9" /></div>
-              <div className="font-mono text-lg mt-4">00:{seconds.toString().padStart(2, '0')}</div>
-              <div className="flex gap-2 mt-4">{recording ? <button onClick={stopRecording} className="btn btn-danger"><Square className="w-4 h-4" />Stop</button> : <button onClick={startRecording} className="btn btn-primary"><Mic className="w-4 h-4" />Start Recording</button>}{recordedUrl && !recording && <><audio controls src={recordedUrl} /><button onClick={() => setRecordedUrl('')} className="btn btn-ghost"><RotateCcw className="w-4 h-4" /></button></>}</div>
-            </div>}
+
+          {/* Upload tab */}
+          {tab === 'upload' && (
+            !file ? (
+              <label className="h-56 border border-dashed border-violet-400/30 rounded-xl flex flex-col items-center justify-center cursor-pointer bg-violet-500/5 hover:bg-violet-500/10 transition-colors">
+                <UploadCloud className="w-10 h-10 text-violet-400 mb-3" />
+                <strong className="text-sm">Drop audio here or browse</strong>
+                <span className="text-xs text-[rgb(var(--text-muted))] mt-2">WAV, MP3, M4A, OGG, WebM</span>
+                <input
+                  className="hidden"
+                  type="file"
+                  accept=".mp3,.wav,.m4a,.ogg,.webm,audio/*"
+                  onChange={(e) => { setFile(e.target.files?.[0] ?? null); setLocalError(''); }}
+                />
+              </label>
+            ) : (
+              <div className="h-56 flex flex-col items-center justify-center rounded-xl bg-[var(--hover-bg)] gap-3">
+                <audio controls src={URL.createObjectURL(file)} className="w-[80%]" />
+                <p className="text-sm">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                {!isRunning && !isDone && (
+                  <button onClick={() => setFile(null)} className="btn btn-ghost btn-sm">
+                    <Trash2 className="w-4 h-4" /> Remove
+                  </button>
+                )}
+              </div>
+            )
+          )}
+
+          {/* Record tab */}
+          {tab === 'record' && (
+            <div className="h-56 flex flex-col items-center justify-center rounded-xl border border-violet-400/20 bg-violet-500/5 gap-4">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center ${
+                recording ? 'bg-red-500/25 text-red-300 animate-pulse' : 'bg-violet-500/20 text-violet-300'
+              }`}>
+                <Mic className="w-9 h-9" />
+              </div>
+              <div className="font-mono text-lg">00:{seconds.toString().padStart(2, '0')}</div>
+              <div className="flex items-center gap-2">
+                {recording ? (
+                  <button onClick={stopRecording} className="btn btn-danger btn-sm">
+                    <Square className="w-4 h-4" /> Stop
+                  </button>
+                ) : (
+                  <button onClick={startRecording} disabled={isRunning || isDone} className="btn btn-primary btn-sm">
+                    <Mic className="w-4 h-4" /> Start Recording
+                  </button>
+                )}
+                {recordedUrl && !recording && (
+                  <>
+                    <audio controls src={recordedUrl} className="h-8" />
+                    {!isRunning && !isDone && (
+                      <button onClick={() => { setRecordedBlob(null); setRecordedUrl(''); }} className="btn btn-ghost btn-sm">
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Language + verify */}
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm text-[rgb(var(--text-secondary))]">
+              <Globe2 className="w-4 h-4" />
+              <select
+                value={language}
+                disabled={isRunning || isDone}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="input h-8 text-sm py-0 pr-7"
+              >
+                {LANGUAGE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+
+            {!isDone && (
+              <button
+                onClick={handleVerify}
+                disabled={isRunning || (!file && !recordedBlob)}
+                className="btn btn-primary"
+              >
+                {isRunning ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {phase === 'uploading' ? 'Uploading…' : 'Verifying…'}</>
+                ) : (
+                  <><Play className="w-4 h-4" /> Verify Voice</>
+                )}
+              </button>
+            )}
+
+            {(phase === 'done' || phase === 'error') && (
+              <button onClick={handleReset} className="btn btn-ghost">
+                <RotateCcw className="w-4 h-4" /> New Session
+              </button>
+            )}
           </div>
         </section>
-        <aside className="card h-fit">
-          <h2 className="font-semibold mb-4">Recording Details</h2>
-          <div className="space-y-3">
-            <label className="block text-xs text-[rgb(var(--text-muted))]">Reference ID<input className="input mt-1.5" value={referenceId} onChange={(e)=>setReferenceId(e.target.value)} placeholder="REF-2026-001" /></label>
-            <label className="block text-xs text-[rgb(var(--text-muted))]">Country<input className="input mt-1.5" value={country} onChange={(e)=>setCountry(e.target.value)} /></label>
-            <label className="block text-xs text-[rgb(var(--text-muted))]">Language<input className="input mt-1.5" value={language} onChange={(e)=>setLanguage(e.target.value)} /></label>
-            <label className="block text-xs text-[rgb(var(--text-muted))]">Speaker ID (optional)<input className="input mt-1.5" value={speakerId} onChange={(e)=>setSpeakerId(e.target.value)} /></label>
-          </div>
+
+        {/* Right: live agent panel */}
+        <aside className="space-y-4">
+          <AgentActivityPanel
+            phase={phase}
+            agentStates={agentStates}
+            processingTimeMs={result?.processing_time_ms}
+            simulationMode={result?.simulation_mode}
+            activatedCount={result?.activated_agents?.length}
+          />
+
+          {phase === 'done' && result && (
+            <RecoveryPanel
+              outcome={result.outcome}
+              recoveryAction={result.recovery_action}
+              customerMessage={recovery?.customer_message ?? result.customer_message}
+              geminiUsed={recovery?.gemini_used}
+              onRetry={handleReset}
+              onRecordAgain={() => { handleReset(); setTab('record'); }}
+            />
+          )}
         </aside>
       </div>
-      <button onClick={verify} disabled={loading} className="btn btn-primary btn-lg w-full sm:w-auto">
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-        {loading ? 'Verifying...' : 'Verify Voice'}
-      </button>
     </div>
   );
 }
