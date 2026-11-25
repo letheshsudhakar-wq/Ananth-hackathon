@@ -1,0 +1,11 @@
+# Member 3: Audio Intelligence, Adaptive Trust Engine & Testing
+# Standard Python 3.13 dependencies (Pre-installed in .venv)
+# Compatible across Python 3.13.5 and 3.13.7
+
+# Audio signal reading and high-performance array operations
+numpy>=2.0.0
+scipy>=1.14.0
+soundfile>=0.12.1
+
+# Automated testing framework
+pytest>=8.0.0

@@ -5,6 +5,8 @@ __pycache__/
 .venv/
 venv/
 env/
+ENV/
+*.env
 
 # Notebook checkpoints
 .ipynb_checkpoints/
@@ -21,6 +23,13 @@ ml-core/dataset/
 *.mp3
 *.flac
 *.ogg
+*.m4a
+*.aac
+*.opus
+data/raw/
+data/recordings/
+tests/recordings/
+*.pcm
 
 # Results + checkpoints are DURABLE ON DRIVE, not committed (mirrors folium).
 # Repo only tracks the empty results/ folder (.gitkeep).
@@ -28,8 +37,11 @@ ml-core/results/*
 !ml-core/results/.gitkeep
 ml-core/checkpoints/
 
-# Local secrets
+# Local secrets & credentials
 .env
+.env.local
+*.pem
+*.key
 
 # The fabricated/wrong PS file (not the real problem statement for SIH26104)
 SIH_2026_Problem_Statement_104.md
@@ -64,6 +76,11 @@ backend/**/*.pyo
 backend/.pytest_cache/
 backend/.coverage
 backend/htmlcov/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Logs and temp audio processing artifacts
 backend/logs/
@@ -75,8 +92,16 @@ test_data.zip
 test_data.zip.manifest.json
 script.md
 qa.md
+
 # TypeScript incremental build cache
 frontend/web/*.tsbuildinfo
 
-
 .vercel
+
+# IDE & OS specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
