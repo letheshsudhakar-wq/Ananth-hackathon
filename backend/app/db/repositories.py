@@ -13,7 +13,7 @@ from typing import Any, Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AnalysisEvidence, EnrolledSpeaker
+from app.db.models import AnalysisEvidence, EnrolledSpeaker, UserProfile
 
 
 # ─────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ class EvidenceRepository:
         self,
         organization: str | None = None,
         severity: str | None = None,
+        flagged: bool | None = None,
         from_ts: datetime | None = None,
         to_ts: datetime | None = None,
         limit: int = 50,
@@ -56,6 +57,8 @@ class EvidenceRepository:
 
         if organization:
             stmt = stmt.where(AnalysisEvidence.organization == organization)
+        if flagged is not None:
+            stmt = stmt.where(AnalysisEvidence.flagged == flagged)
         if severity:
             stmt = stmt.where(AnalysisEvidence.severity == severity)
         if from_ts:
@@ -139,3 +142,34 @@ class EnrollmentRepository:
 
     async def exists(self, speaker_id: str) -> bool:
         return (await self.get(speaker_id)) is not None
+
+    async def list_all(self) -> Sequence[EnrolledSpeaker]:
+        stmt = select(EnrolledSpeaker).order_by(
+            EnrolledSpeaker.updated_at.desc()
+        )
+        result = await self._session.execute(stmt)
+        return result.scalars().all()
+
+
+class ProfileRepository:
+    """Persistence for the local single-user profile."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self) -> UserProfile:
+        record = await self._session.get(UserProfile, 1)
+        if record is None:
+            record = UserProfile(id=1)
+            self._session.add(record)
+            await self._session.commit()
+            await self._session.refresh(record)
+        return record
+
+    async def update(self, data: dict[str, Any]) -> UserProfile:
+        record = await self.get()
+        for key, value in data.items():
+            setattr(record, key, value)
+        await self._session.commit()
+        await self._session.refresh(record)
+        return record

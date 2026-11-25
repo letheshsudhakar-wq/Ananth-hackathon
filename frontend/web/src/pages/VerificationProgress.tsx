@@ -1,7 +1,6 @@
 /**
  * src/pages/VerificationProgress.tsx  (Phase 4 — real pipeline progress)
- * Lightweight redirect page: shows spinner while VoiceVerification runs in background.
- * If session result exists (navigated back), just forwards to results.
+ * Lightweight redirect page that forwards completed sessions to results.
  */
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -13,7 +12,8 @@ export function VerificationProgress() {
   useEffect(() => {
     // If the orchestration result is already in session (from VoiceVerification),
     // go directly to results. Otherwise redirect to voice-verification to start fresh.
-    const result = sessionStorage.getItem('ananth-orch-result');
+    const result = sessionStorage.getItem('ananth-orch-result')
+      || sessionStorage.getItem('ananth-verification-result');
     const t = setTimeout(() => {
       navigate(result ? '/verification-results' : '/voice-verification', { replace: true });
     }, 500);

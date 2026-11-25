@@ -1,7 +1,7 @@
 /**
  * src/context/SignalSettingsContext.tsx
  * Global multi-signal fusion toggles (which signals vote in the verdict).
- * Persisted to localStorage so the demo choice survives reloads.
+ * Persisted to localStorage so the user's fusion choice survives reloads.
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { DEFAULT_FUSION, FusionMask } from '@/types';

@@ -34,6 +34,7 @@ export function Alerts() {
     try {
       const res = await getAlerts({
         organization: org,
+        flagged: true,
         severity: severityFilter || undefined,
         limit: 50,
       });

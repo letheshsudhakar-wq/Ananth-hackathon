@@ -40,6 +40,7 @@ from app.middleware.error_handler import (
 )
 from app.services.ml_service import MLService
 from app.services.organization_service import OrganizationService
+from app.api.v1 import detectif
 
 logger = get_logger(__name__)
 
@@ -119,7 +120,10 @@ def create_application() -> FastAPI:
     app.add_exception_handler(Exception, general_exception_handler)
 
     # ── Routers ───────────────────────────────────────────────────────────
-    from app.api.v1 import health, analysis, enrollment, streaming, alerts, orchestration, agents
+    from app.api.v1 import (
+        health, analysis, enrollment, streaming, alerts, orchestration, agents,
+        profile, analytics,
+    )
 
     # Unversioned health (liveness probe)
     app.include_router(health.router)
@@ -133,6 +137,9 @@ def create_application() -> FastAPI:
 
     # Specialized agentic agents (Phase 2)
     app.include_router(agents.router)
+    app.include_router(detectif.router)
+    app.include_router(profile.router)
+    app.include_router(analytics.router)
 
     return app
 

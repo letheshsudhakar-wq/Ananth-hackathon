@@ -111,3 +111,44 @@ class EnrolledSpeaker(Base):
 
     def __repr__(self) -> str:
         return f"<EnrolledSpeaker speaker_id={self.speaker_id} name={self.display_name}>"
+
+class UserProfile(Base):
+    """Local application profile used by the existing single-user frontend."""
+
+    __tablename__ = "user_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    full_name: Mapped[str] = mapped_column(String(256), nullable=False, default="Ananth")
+    email: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    role: Mapped[str] = mapped_column(String(128), nullable=False, default="Security Analyst")
+    organization: Mapped[str] = mapped_column(String(64), nullable=False, default="enterprise")
+    phone: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now_utc
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now_utc, onupdate=_now_utc
+    )
+
+
+class DetectifAnalysis(Base):
+    """Persisted result from the external Detectif analysis service."""
+    __tablename__ = "detectif_analyses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    analysis_id: Mapped[str] = mapped_column(String(36), unique=True, nullable=False, default=_uuid4, index=True)
+    provider_request_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
+    operation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    label: Mapped[str] = mapped_column(String(32), nullable=False)
+    is_synthetic: Mapped[bool] = mapped_column(Boolean, nullable=False, index=True)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    duration_seconds: Mapped[float] = mapped_column(Float, nullable=False)
+    scored_seconds: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now_utc, nullable=False, index=True)
+
+    __table_args__ = (
+        Index("ix_detectif_created", "created_at"),
+        Index("ix_detectif_synthetic_created", "is_synthetic", "created_at"),
+    )

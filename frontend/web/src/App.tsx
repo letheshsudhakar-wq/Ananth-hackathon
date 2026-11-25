@@ -28,6 +28,7 @@ import { DetectionHistory } from '@/pages/DetectionHistory';
 import { ThreatIntelligence } from '@/pages/ThreatIntelligence';
 import { Analytics } from '@/pages/Analytics';
 import { EnrolledSpeakers } from '@/pages/EnrolledSpeakers';
+import { Profile } from '@/pages/Profile';
 
 export function App() {
   return (
@@ -54,6 +55,7 @@ export function App() {
                   <Route path="/alerts" element={<Alerts />} />
                   <Route path="/audit" element={<Audit />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/profile" element={<Profile />} />
                   <Route path="/privacy" element={<Privacy />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />

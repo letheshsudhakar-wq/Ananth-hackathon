@@ -21,6 +21,7 @@ class EvidenceService:
         session: AsyncSession,
         organization: Optional[str] = None,
         severity: Optional[str] = None,
+        flagged: Optional[bool] = None,
         from_ts: Optional[datetime] = None,
         to_ts: Optional[datetime] = None,
         limit: int = 50,
@@ -30,6 +31,7 @@ class EvidenceService:
         return await repo.list_filtered(
             organization=organization,
             severity=severity,
+            flagged=flagged,
             from_ts=from_ts,
             to_ts=to_ts,
             limit=min(limit, 200),  # hard cap

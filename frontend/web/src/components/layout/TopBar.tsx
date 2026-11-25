@@ -105,9 +105,16 @@ export function TopBar() {
           </Tooltip>
 
           {/* Avatar */}
-          <div className="w-7 h-7 rounded-full bg-[rgb(var(--bg-elevated))] flex items-center justify-center border border-[rgb(var(--border-subtle))]">
-            <span className="text-[11px] font-semibold text-[rgb(var(--text-secondary))]">AD</span>
-          </div>
+          <Tooltip label="Open profile" side="bottom">
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              className="w-7 h-7 rounded-full bg-[rgb(var(--bg-elevated))] flex items-center justify-center border border-[rgb(var(--border-subtle))] hover:border-[rgb(var(--accent))] transition-colors"
+              aria-label="Open profile"
+            >
+              <span className="text-[11px] font-semibold text-[rgb(var(--text-secondary))]">AD</span>
+            </button>
+          </Tooltip>
         </div>
       </div>
 

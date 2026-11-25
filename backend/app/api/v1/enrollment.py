@@ -8,11 +8,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import validate_audio_upload
 from app.db.database import get_session
+from app.db.repositories import EnrollmentRepository
 from app.schemas.enrollment import EnrollResponse, SpeakerProfile
 from app.services.enrollment_service import EnrollmentService
 from app.services.ml_service import MLServiceError, MLServiceUnavailable
 
 router = APIRouter(prefix="/v1", tags=["enrollment"])
+
+
+@router.get(
+    "/enroll",
+    response_model=list[SpeakerProfile],
+    summary="List enrolled speakers",
+)
+async def list_speakers(
+    session: AsyncSession = Depends(get_session),
+) -> list[SpeakerProfile]:
+    records = await EnrollmentRepository(session).list_all()
+    return [
+        SpeakerProfile(
+            speaker_id=r.speaker_id,
+            display_name=r.display_name,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+        )
+        for r in records
+    ]
 
 
 @router.post(
