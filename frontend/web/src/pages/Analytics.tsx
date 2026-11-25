@@ -1,14 +1,115 @@
-import React, { useState } from 'react';
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
+import { getDetectifHistory, getDetectifStats } from '@/services/api';
+import type { DetectifHistoryItem, DetectifStats } from '@/services/api';
 
-const data = [
-  {day:'Mon',safe:78,threat:12,activity:90},{day:'Tue',safe:84,threat:9,activity:93},{day:'Wed',safe:72,threat:18,activity:90},{day:'Thu',safe:88,threat:7,activity:95},{day:'Fri',safe:92,threat:11,activity:103},{day:'Sat',safe:76,threat:14,activity:90},{day:'Sun',safe:96,threat:6,activity:102}
-];
 export function Analytics() {
-  const [range,setRange]=useState('30 Days');
-  return <div className="max-w-6xl mx-auto space-y-5"><div className="flex items-end justify-between"><div><h1 className="text-xl font-semibold">Analytics</h1><p className="text-sm text-[rgb(var(--text-muted))] mt-1">Simulated verification performance</p></div><div className="flex gap-2">{['7 Days','30 Days','90 Days'].map(v=><button key={v} onClick={()=>setRange(v)} className={`btn btn-sm ${range===v?'btn-primary':'btn-outline'}`}>{v}</button>)}</div></div>
-    <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">{[['Total','12,480'],['Safe Rate','98.7%'],['Threat Rate','1.3%'],['Confidence','96.2%'],['Avg. Time','1.8s']].map(([k,v])=><div key={k} className="card !p-4"><div className="text-xl font-bold">{v}</div><div className="text-xs text-[rgb(var(--text-muted))] mt-1">{k}</div></div>)}</div>
-    <div className="grid lg:grid-cols-2 gap-5"><section className="card"><h2 className="font-semibold mb-4">Verification Trends</h2><div className="h-64"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data}><defs><linearGradient id="colorSafe" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.5}/><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="#243047" strokeDasharray="3 3"/><XAxis dataKey="day" stroke="#64748b"/><YAxis stroke="#64748b"/><Tooltip/><Area type="monotone" dataKey="safe" stroke="#a78bfa" fill="url(#colorSafe)"/></AreaChart></ResponsiveContainer></div></section>
-      <section className="card"><h2 className="font-semibold mb-4">Safe vs Threat</h2><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={data}><CartesianGrid stroke="#243047" strokeDasharray="3 3"/><XAxis dataKey="day" stroke="#64748b"/><YAxis stroke="#64748b"/><Tooltip/><Bar dataKey="safe" fill="#10b981" radius={4}/><Bar dataKey="threat" fill="#f43f5e" radius={4}/></BarChart></ResponsiveContainer></div></section></div>
-  </div>;
+  const [stats, setStats] = useState<DetectifStats | null>(null);
+  const [items, setItems] = useState<DetectifHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [statsResult, historyResult] = await Promise.all([
+        getDetectifStats(),
+        getDetectifHistory(200, 0)
+      ]);
+      setStats(statsResult);
+      setItems(historyResult.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load analytics.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void load(); }, []);
+
+  const chartData = useMemo(() => {
+    const grouped = new Map<string, { date: string; genuine: number; synthetic: number }>();
+    for (const item of items) {
+      const date = new Date(item.created_at).toLocaleDateString();
+      const entry = grouped.get(date) ?? { date, genuine: 0, synthetic: 0 };
+      if (item.is_synthetic) entry.synthetic += 1;
+      else entry.genuine += 1;
+      grouped.set(date, entry);
+    }
+    return Array.from(grouped.values()).reverse();
+  }, [items]);
+
+  const metrics = [
+    ['Total analyses', stats?.total ?? 0],
+    ['Genuine recordings', stats?.genuine_count ?? 0],
+    ['Synthetic recordings', stats?.synthetic_count ?? 0],
+    ['Synthetic rate', `${stats?.synthetic_percentage ?? 0}%`],
+    ['Average detection score', stats?.average_score == null ? 'N/A' : `${(stats.average_score * 100).toFixed(2)}%`]
+  ];
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-5">
+      <div className="flex justify-between items-end gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Analytics</h1>
+          <p className="text-sm text-[rgb(var(--text-muted))] mt-1">
+            Calculated from saved Detectif analyses
+          </p>
+        </div>
+        <button onClick={() => void load()} className="btn btn-outline btn-sm" disabled={loading}>
+          Refresh
+        </button>
+      </div>
+
+      {error && <div className="card p-4 text-sm text-red-400">{error}</div>}
+      {loading && <div className="card p-5 text-sm">Loading database analytics...</div>}
+
+      {!loading && stats && (
+        <>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {metrics.map(([label, value]) => (
+              <div key={label} className="card !p-4">
+                <div className="text-xl font-bold">{value}</div>
+                <div className="text-xs text-[rgb(var(--text-muted))] mt-1">{label}</div>
+              </div>
+            ))}
+          </div>
+
+          <section className="card">
+            <h2 className="font-semibold mb-1">Daily analysis volume</h2>
+            <p className="text-xs text-[rgb(var(--text-muted))] mb-4">
+              Genuine and synthetic classifications in the latest 200 saved records
+            </p>
+            <div className="h-72">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid stroke="#243047" strokeDasharray="3 3" />
+                    <XAxis dataKey="date" stroke="#64748b" />
+                    <YAxis allowDecimals={false} stroke="#64748b" />
+                    <Tooltip />
+                    <Bar dataKey="genuine" name="Genuine" fill="#10b981" />
+                    <Bar dataKey="synthetic" name="Synthetic" fill="#f43f5e" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-sm text-[rgb(var(--text-muted))]">
+                  No saved analyses yet. Upload an audio recording to begin.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <p className="text-xs text-[rgb(var(--text-muted))]">
+            Latest saved analysis: {stats.latest_analysis_at
+              ? new Date(stats.latest_analysis_at).toLocaleString()
+              : 'None'}
+          </p>
+        </>
+      )}
+    </div>
+  );
 }

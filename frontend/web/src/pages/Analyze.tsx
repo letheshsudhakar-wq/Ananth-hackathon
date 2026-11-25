@@ -87,7 +87,7 @@ export function Analyze() {
           <input
             type="file"
             id="audio-upload"
-            accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.mp4,.mpeg,.webm"
+            accept="*/*"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -213,6 +213,12 @@ export function Analyze() {
 
           <div className="card p-5 space-y-3 text-xs">
             <h3 className="text-sm font-semibold">Analysis Details</h3>
+            {result.analysis_id && (
+              <div className="flex justify-between gap-4">
+                <span>Saved Analysis ID</span>
+                <span className="truncate ml-4">{result.analysis_id}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span>Classification</span>
               <span>{result.result.label}</span>
@@ -244,3 +250,4 @@ export function Analyze() {
     </div>
   );
 }
+
