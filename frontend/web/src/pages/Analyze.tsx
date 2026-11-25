@@ -87,7 +87,7 @@ export function Analyze() {
           <input
             type="file"
             id="audio-upload"
-            accept="audio/*,.wav,.mp3,.flac,.ogg"
+            accept="audio/*,video/*,.wav,.mp3,.m4a,.aac,.flac,.ogg,.mp4,.mpeg,.webm"
             onChange={handleFileChange}
             className="hidden"
           />
