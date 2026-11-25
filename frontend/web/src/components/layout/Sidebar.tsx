@@ -6,7 +6,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { ShieldCheck, FileLock2, AudioWaveform, Radio, ShieldAlert, ScrollText, Settings, LayoutDashboard } from 'lucide-react';
+import { FileLock2, AudioWaveform, Radio, ShieldAlert, ScrollText, Settings, LayoutDashboard, Users, BrainCircuit, BarChart3, Activity } from 'lucide-react';
 
 interface NavItem {
   to: string;
@@ -17,18 +17,20 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, accent: 'rgb(var(--accent))' },
-  { to: '/live-call', label: 'Live Monitor', icon: Radio, accent: 'rgb(var(--risk-high))' },
-  { to: '/analyze', label: 'Analyze', icon: AudioWaveform, accent: 'rgb(var(--accent))' },
-  { to: '/alerts', label: 'Alerts', icon: ShieldAlert, accent: 'rgb(var(--risk-critical))' },
-  { to: '/audit', label: 'Audit Log', icon: ScrollText, accent: 'rgb(var(--risk-medium))' },
+  { to: '/voice-verification', label: 'Voice Verification', icon: AudioWaveform, accent: 'rgb(var(--accent))' },
+  { to: '/audio-intelligence', label: 'Audio Intelligence', icon: BrainCircuit, accent: 'rgb(var(--accent-soft))' },
+  { to: '/enrolled-speakers', label: 'Enrolled Speakers', icon: Users, accent: 'rgb(var(--risk-low))' },
+  { to: '/detection-history', label: 'Detection History', icon: ScrollText, accent: 'rgb(var(--risk-medium))' },
+  { to: '/threat-intelligence', label: 'Threat Intelligence', icon: ShieldAlert, accent: 'rgb(var(--risk-critical))' },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3, accent: 'rgb(var(--cyan))' },
   { to: '/settings', label: 'Settings', icon: Settings, accent: 'rgb(var(--accent-soft))' },
 ];
 
 export function Sidebar() {
   return (
-    <aside className="flex w-16 shrink-0 flex-col items-center select-none">
+    <aside className="flex w-16 shrink-0 flex-col items-center select-none max-md:fixed max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:z-40 max-md:w-full max-md:h-16 max-md:flex-row max-md:border-t max-md:border-[rgb(var(--border-subtle))] max-md:bg-[rgb(var(--rail-bg))]">
       {/* Nav icons with generous spacing and comfortable targets */}
-      <nav className="flex flex-col items-center gap-3 pt-10 flex-1 w-full">
+      <nav className="flex flex-col items-center gap-3 pt-10 flex-1 w-full max-md:flex-row max-md:justify-around max-md:overflow-x-auto max-md:pt-0 max-md:px-1 max-md:gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (

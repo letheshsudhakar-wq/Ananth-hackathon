@@ -19,6 +19,15 @@ import { Audit } from '@/pages/Audit';
 import { Settings } from '@/pages/Settings';
 import { Privacy } from '@/pages/Privacy';
 import { NotFound } from '@/pages/NotFound';
+import { LandingPage } from '@/pages/LandingPage';
+import { VoiceVerification } from '@/pages/VoiceVerification';
+import { AudioIntelligence } from '@/pages/AudioIntelligence';
+import { VerificationProgress } from '@/pages/VerificationProgress';
+import { VerificationResults } from '@/pages/VerificationResults';
+import { DetectionHistory } from '@/pages/DetectionHistory';
+import { ThreatIntelligence } from '@/pages/ThreatIntelligence';
+import { Analytics } from '@/pages/Analytics';
+import { EnrolledSpeakers } from '@/pages/EnrolledSpeakers';
 
 export function App() {
   return (
@@ -28,9 +37,17 @@ export function App() {
           <SignalSettingsProvider>
             <AlertProvider>
               <Routes>
+                <Route path="/" element={<LandingPage />} />
                 <Route element={<AppShell />}>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/voice-verification" element={<VoiceVerification />} />
+                  <Route path="/audio-intelligence" element={<AudioIntelligence />} />
+                  <Route path="/verification-progress" element={<VerificationProgress />} />
+                  <Route path="/verification-results" element={<VerificationResults />} />
+                  <Route path="/detection-history" element={<DetectionHistory />} />
+                  <Route path="/threat-intelligence" element={<ThreatIntelligence />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/enrolled-speakers" element={<EnrolledSpeakers />} />
                   <Route path="/live-call" element={<LiveCall />} />
                   <Route path="/analyze" element={<Analyze />} />
                   <Route path="/voiceprints" element={<Voiceprints />} />

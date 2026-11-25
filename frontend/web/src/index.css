@@ -5,6 +5,7 @@
 /* ── Design Tokens — SOC Dashboard ────────────────────────────────── */
 :root {
   color-scheme: dark;
+  --cyan: 56 189 248;
 
   --bg: 19 19 21;           /* #131315 near-black */
   --bg-surface: 19 19 21;   /* #131315 recessed content canvas */

@@ -26,7 +26,7 @@ export function AppShell() {
         <Sidebar />
 
         {/* Content well — inset with rounded corners, this is the only scrolling area */}
-        <main className="flex-1 min-w-0 min-h-0 pr-3 pb-3 pt-0 pl-1">
+        <main className="flex-1 min-w-0 min-h-0 pr-3 pb-3 pt-0 pl-1 max-md:pb-20 max-md:pr-1 max-md:pl-1">
           <div className="h-full w-full overflow-y-auto rounded-2xl bg-[rgb(var(--bg-surface))] border border-black/5 dark:border-white/[0.08] shadow-sm">
             <div className="page-enter p-6 sm:p-7">
               <Outlet />
