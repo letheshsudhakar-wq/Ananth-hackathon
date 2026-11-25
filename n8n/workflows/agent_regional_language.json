@@ -1,0 +1,216 @@
+{
+  "name": "ANANTH Agent 4 - Regional Language",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth/agent/regional_language",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-ws-regional",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ananth-agent-regional-language"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate the Regional Language request before routing to the Python backend.\nconst body = $json.body || $json;\nif (!body.session_id) {\n  return [{ json: { status: 'ERROR', error: 'VALIDATION_ERROR', message: 'session_id is mandatory', agent_name: 'regional_language_agent' } }];\n}\nreturn [{\n  json: {\n    session_id: String(body.session_id),\n    hint_language: body.hint_language || null,\n    transcript_text: body.transcript_text || null,\n    detected_language: body.detected_language || null,\n    confidence: body.confidence !== undefined ? Number(body.confidence) : null\n  }\n}];"
+      },
+      "id": "node-validate-regional",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://localhost:8000' }}/v1/agents/regional_language",
+        "authentication": "headerAuth",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ananth-agent-secret",
+            "name": "ANANTH Agent Secret"
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-http-regional",
+      "name": "HTTP Request Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "name": "SUPPORTED",
+              "value1": "={{ $json.status }}",
+              "operation": "equal",
+              "value2": "PASS"
+            },
+            {
+              "name": "WARNING",
+              "value1": "={{ $json.status }}",
+              "operation": "equal",
+              "value2": "WARNING"
+            },
+            {
+              "name": "ERROR_FALLBACK",
+              "value1": "={{ $json.status }}",
+              "operation": "equal",
+              "value2": "ERROR"
+            }
+          ]
+        },
+        "fallbackOutput": "none"
+      },
+      "id": "node-switch-regional",
+      "name": "Switch Validation Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "recoveryPrompt",
+              "value": "={{ $json.findings.preferred_recovery_language ? 'A recovery prompt is available in: ' + $json.findings.preferred_recovery_language : '' }}"
+            }
+          ],
+          "boolean": []
+        },
+        "options": {}
+      },
+      "id": "node-edit-regional",
+      "name": "Edit Fields Recovery Hint",
+      "type": "n8n-nodes-base.editFields",
+      "typeVersion": 2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-regional-a",
+      "name": "Respond to Webhook (A)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-regional-b",
+      "name": "Respond to Webhook (B)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Backend": {
+      "main": [
+        [
+          {
+            "node": "Switch Validation Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Validation Status": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (A)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields Recovery Hint",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook (B)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields Recovery Hint": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (B)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

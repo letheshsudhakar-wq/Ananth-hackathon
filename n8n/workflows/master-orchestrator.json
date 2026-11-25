@@ -1,0 +1,216 @@
+{
+  "name": "ANANTH Master Orchestrator (Phase 3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth/orchestrate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-master-webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "webhookId": "ananth-master-orchestrator"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic validation before any processing.\nconst body = $json.body || $json;\nif (!body.session_id) {\n  return [{ json: { valid: false, status: 'ERROR', error: 'VALIDATION_ERROR', message: 'session_id is mandatory' } }];\n}\nconst risk = String(body.action_risk || 'MEDIUM').toUpperCase();\nif (!['LOW', 'MEDIUM', 'HIGH', 'FINANCIAL'].includes(risk)) {\n  return [{ json: { valid: false, status: 'ERROR', error: 'INVALID_RISK_TIER', message: 'Unsupported action_risk' } }];\n}\nreturn [{\n  json: {\n    valid: true,\n    session_id: String(body.session_id),\n    caller_id: String(body.caller_id || 'unknown'),\n    action_risk: risk,\n    audio_path: body.audio_path || null,\n    sample_rate: body.sample_rate || null,\n    audio_report: body.audio_report || null,\n    preferred_language: body.preferred_language || null,\n    enrolled_language: body.enrolled_language || null,\n    current_language: body.current_language || null,\n    transcript_text: body.transcript_text || null,\n    language_confidence: body.language_confidence !== undefined ? body.language_confidence : null,\n    webrtc_stats: body.webrtc_stats || null,\n    aletheia: body.aletheia || null,\n    eidos: body.eidos || null,\n    detection_result: body.detection_result || null,\n    agent_findings: body.agent_findings || null,\n    use_gemini: body.use_gemini !== false,\n    simulation_mode: body.simulation_mode === true\n  }\n}];"
+      },
+      "id": "node-master-validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "allSets": false },
+          "conditions": [
+            { "value1": "={{ $json.valid }}", "operation": "equal", "value2": true }
+          ]
+        }
+      },
+      "id": "node-master-if",
+      "name": "IF Valid Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "node-master-respond-invalid",
+      "name": "Respond Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [860, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://127.0.0.1:8000' }}/v1/n8n/prechecks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_BRIDGE_SECRET || '' }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ session_id: $json.session_id, audio_path: $json.audio_path, sample_rate: $json.sample_rate, audio_report: $json.audio_report }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "node-master-prechecks",
+      "name": "Audio Pre-checks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic routing metadata; the backend executes only relevant agents concurrently.\nconst req = $('Validate Input').first().json;\nconst pre = $json;\nconst planned = ['speech_sufficiency', 'acoustic_intelligence', 'network_resilience', 'regional_language'];\nif (req.eidos || req.enrolled_language || (req.current_language && req.enrolled_language && req.current_language !== req.enrolled_language)) {\n  planned.push('cross_language_identity');\n}\nreturn [{ json: { ...req, audio_report: pre, planned_agents: planned } }];"
+      },
+      "id": "node-master-routing",
+      "name": "Agent Routing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://127.0.0.1:8000' }}/v1/n8n/agents/batch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_BRIDGE_SECRET || '' }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "node-master-agents",
+      "name": "Specialized Agents Concurrent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reuse agent findings; never re-run audio processing.\nconst req = $('Agent Routing').first().json;\nconst agents = $json;\nreturn [{ json: { ...req, agent_findings: agents.agent_findings || {}, activated_agents: agents.activated_agents || [], agent_errors: agents.errors || [] } }];"
+      },
+      "id": "node-master-trust-input",
+      "name": "Trust Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://127.0.0.1:8000' }}/v1/n8n/trust",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_BRIDGE_SECRET || '' }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "node-master-trust",
+      "name": "Detectif AI and Trust Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Only the validated trust facts are sent to the recovery phrasing stage.\nconst req = $('Trust Input').first().json;\nconst trust = $json;\nconst td = trust.trust_decision || {};\nreturn [{ json: { session_id: req.session_id, verification_status: td.verification_status || null, decision: td.decision || null, session_state: td.session_state || null, reason_codes: td.reason_codes || [], recovery_action: trust.recovery_action || null, agent_findings: req.agent_findings || {}, preferred_language: trust.preferred_language || req.preferred_language || 'en', use_gemini: req.use_gemini !== false } }];"
+      },
+      "id": "node-master-recovery-input",
+      "name": "Recovery Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://127.0.0.1:8000' }}/v1/n8n/recovery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_BRIDGE_SECRET || '' }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "node-master-recovery",
+      "name": "Gemini Recovery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Assemble the backward-compatible unified response.\nconst req = $('Trust Input').first().json;\nconst trust = $('Detectif AI and Trust Engine').first().json;\nconst pre = $('Audio Pre-checks').first().json;\nconst rec = $json;\nconst td = trust.trust_decision || {};\nreturn [{ json: {\n  session_id: req.session_id,\n  activated_agents: trust.activated_agents || req.activated_agents || [],\n  agent_findings: trust.agent_findings || req.agent_findings || {},\n  detection_result: trust.detection_result || {},\n  identity_result: trust.identity_result || {},\n  trust_decision: td,\n  decision_reasons: trust.decision_reasons || td.reason_codes || [],\n  recovery_action: rec.recovery_action !== undefined ? rec.recovery_action : (trust.recovery_action || null),\n  customer_message: rec.customer_message || trust.customer_message || '',\n  preferred_language: rec.preferred_language || trust.preferred_language || 'en',\n  processing_time_ms: Math.round(((pre.processing_time_ms || 0) + (trust.processing_time_ms || 0) + (rec.processing_time_ms || 0)) * 100) / 100,\n  errors: [...(trust.errors || []), ...(req.agent_errors || []), ...(rec.validation_errors || [])],\n  simulation_mode: !!(trust.simulation_mode || req.simulation_mode),\n  outcome: trust.outcome || td.outcome,\n  verification_status: td.verification_status,\n  decision: td.decision,\n  session_state: td.session_state,\n  recovery_details: rec\n} }];"
+      },
+      "id": "node-master-unified",
+      "name": "Build Unified Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "node-master-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2620, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]] },
+    "Validate Input": { "main": [[{ "node": "IF Valid Request", "type": "main", "index": 0 }]] },
+    "IF Valid Request": {
+      "main": [
+        [{ "node": "Audio Pre-checks", "type": "main", "index": 0 }],
+        [{ "node": "Respond Invalid", "type": "main", "index": 0 }]
+      ]
+    },
+    "Audio Pre-checks": { "main": [[{ "node": "Agent Routing", "type": "main", "index": 0 }]] },
+    "Agent Routing": { "main": [[{ "node": "Specialized Agents Concurrent", "type": "main", "index": 0 }]] },
+    "Specialized Agents Concurrent": { "main": [[{ "node": "Trust Input", "type": "main", "index": 0 }]] },
+    "Trust Input": { "main": [[{ "node": "Detectif AI and Trust Engine", "type": "main", "index": 0 }]] },
+    "Detectif AI and Trust Engine": { "main": [[{ "node": "Recovery Input", "type": "main", "index": 0 }]] },
+    "Recovery Input": { "main": [[{ "node": "Gemini Recovery", "type": "main", "index": 0 }]] },
+    "Gemini Recovery": { "main": [[{ "node": "Build Unified Response", "type": "main", "index": 0 }]] },
+    "Build Unified Response": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" }
+}

@@ -1,0 +1,111 @@
+{
+  "name": "ANANTH — Agent 3: Network Resilience",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "network-trigger",
+      "name": "Execute Sub-workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn [{\n  json: {\n    session_id: input.session_id || 'unknown',\n    duration_seconds: input.duration_seconds ?? null,\n    sample_rate: input.sample_rate ?? null,\n    webrtc_packet_loss_rate: input.webrtc_packet_loss_rate ?? null,\n    webrtc_jitter_ms: input.webrtc_jitter_ms ?? null,\n    webrtc_rtt_ms: input.webrtc_rtt_ms ?? null,\n    audio_file_path: input.audio_file_path ?? null\n  }\n}];"
+      },
+      "id": "network-prepare",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL }}/v1/n8n/agent/network-resilience",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.ANANTH_N8N_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "network-http",
+      "name": "Call Network Resilience API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "net-cond",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "PASS",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "network-route",
+      "name": "Stream Intact?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "n1", "name": "agent_decision", "value": "PROCEED", "type": "string" },
+            { "id": "n2", "name": "status", "value": "PASS", "type": "string" },
+            { "id": "n3", "name": "session_id", "value": "={{ $json.session_id }}", "type": "string" }
+          ]
+        }
+      },
+      "id": "network-pass",
+      "name": "Output: STREAM OK",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "m1", "name": "agent_decision", "value": "={{ $json.recommended_action }}", "type": "string" },
+            { "id": "m2", "name": "status", "value": "={{ $json.status }}", "type": "string" },
+            { "id": "m3", "name": "summary", "value": "={{ $json.findings.summary }}", "type": "string" },
+            { "id": "m4", "name": "packet_loss_rate", "value": "={{ $json.measurements.webrtc_packet_loss_rate }}", "type": "number" }
+          ]
+        }
+      },
+      "id": "network-fail",
+      "name": "Output: DEGRADED",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Execute Sub-workflow Trigger": { "main": [[{ "node": "Prepare Payload", "type": "main", "index": 0 }]] },
+    "Prepare Payload": { "main": [[{ "node": "Call Network Resilience API", "type": "main", "index": 0 }]] },
+    "Call Network Resilience API": { "main": [[{ "node": "Stream Intact?", "type": "main", "index": 0 }]] },
+    "Stream Intact?": {
+      "main": [
+        [{ "node": "Output: STREAM OK", "type": "main", "index": 0 }],
+        [{ "node": "Output: DEGRADED", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "ananth-local" }
+}

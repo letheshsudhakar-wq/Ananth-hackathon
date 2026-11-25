@@ -1,0 +1,165 @@
+{
+  "name": "ANANTH — Agent 5: Cross-Language Identity",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "cross-trigger",
+      "name": "Execute Sub-workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn [{\n  json: {\n    session_id: input.session_id || 'unknown',\n    enrolled_language: input.enrolled_language ?? null,\n    current_language: input.current_language || 'en',\n    eidos_match_score: input.eidos_match_score ?? null,\n    eidos_confidence: input.eidos_confidence ?? null\n  }\n}];"
+      },
+      "id": "cross-prepare",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL }}/v1/n8n/agent/cross-language-identity",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.ANANTH_N8N_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "cross-http",
+      "name": "Call Cross-Language Identity API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "rightValue": "PASS", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "PASS"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "rightValue": "WARNING", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "WARNING"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "rightValue": "INCONCLUSIVE", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "INCONCLUSIVE"
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      },
+      "id": "cross-switch",
+      "name": "Route by Identity Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "x1", "name": "agent_decision", "value": "PROCEED", "type": "string" },
+            { "id": "x2", "name": "language_switch", "value": "={{ $json.findings.language_switching_detected }}", "type": "boolean" },
+            { "id": "x3", "name": "eidos_match_score", "value": "={{ $json.findings.eidos_match_score }}", "type": "number" }
+          ]
+        }
+      },
+      "id": "cross-pass",
+      "name": "Output: IDENTITY CONFIRMED",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1140, 160]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "y1", "name": "agent_decision", "value": "={{ $json.recommended_action }}", "type": "string" },
+            { "id": "y2", "name": "language_switch", "value": "={{ $json.findings.language_switching_detected }}", "type": "boolean" },
+            { "id": "y3", "name": "summary", "value": "={{ $json.findings.summary }}", "type": "string" }
+          ]
+        }
+      },
+      "id": "cross-warn",
+      "name": "Output: BORDERLINE — STEP UP",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1140, 320]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "z1", "name": "agent_decision", "value": "REQUEST_ENROLLED_LANGUAGE_SAMPLE", "type": "string" },
+            { "id": "z2", "name": "language_switch", "value": "={{ $json.findings.language_switching_detected }}", "type": "boolean" },
+            { "id": "z3", "name": "summary", "value": "={{ $json.findings.summary }}", "type": "string" }
+          ]
+        }
+      },
+      "id": "cross-inconclusive",
+      "name": "Output: INCONCLUSIVE — COLLECT",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1140, 480]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e1", "name": "agent_decision", "value": "REQUEST_FRESH_RECORDING", "type": "string" },
+            { "id": "e2", "name": "error", "value": "={{ $json.error }}", "type": "string" }
+          ]
+        }
+      },
+      "id": "cross-error",
+      "name": "Output: ERROR — FAIL CLOSED",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1140, 640]
+    }
+  ],
+  "connections": {
+    "Execute Sub-workflow Trigger": { "main": [[{ "node": "Prepare Payload", "type": "main", "index": 0 }]] },
+    "Prepare Payload": { "main": [[{ "node": "Call Cross-Language Identity API", "type": "main", "index": 0 }]] },
+    "Call Cross-Language Identity API": { "main": [[{ "node": "Route by Identity Status", "type": "main", "index": 0 }]] },
+    "Route by Identity Status": {
+      "main": [
+        [{ "node": "Output: IDENTITY CONFIRMED", "type": "main", "index": 0 }],
+        [{ "node": "Output: BORDERLINE — STEP UP", "type": "main", "index": 0 }],
+        [{ "node": "Output: INCONCLUSIVE — COLLECT", "type": "main", "index": 0 }],
+        [{ "node": "Output: ERROR — FAIL CLOSED", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "ananth-local" }
+}

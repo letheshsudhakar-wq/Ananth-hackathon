@@ -1,0 +1,203 @@
+{
+  "name": "ANANTH Agent 5 - Cross-Language Identity",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth/agent/cross_language_identity",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-ws-crosslang",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ananth-agent-cross-language-identity"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate the Cross-Language Identity request before routing to the Python backend.\nconst body = $json.body || $json;\nif (!body.session_id || !body.current_language) {\n  return [{ json: { status: 'ERROR', error: 'VALIDATION_ERROR', message: 'session_id and current_language are mandatory', agent_name: 'cross_language_identity_agent' } }];\n}\nreturn [{\n  json: {\n    session_id: String(body.session_id),\n    enrolled_language: body.enrolled_language || null,\n    current_language: String(body.current_language),\n    eidos_match_score: body.eidos_match_score !== undefined ? Number(body.eidos_match_score) : null,\n    eidos_confidence: body.eidos_confidence !== undefined ? Number(body.eidos_confidence) : null\n  }\n}];"
+      },
+      "id": "node-validate-crosslang",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://localhost:8000' }}/v1/agents/cross_language_identity",
+        "authentication": "headerAuth",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ananth-agent-secret",
+            "name": "ANANTH Agent Secret"
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-http-crosslang",
+      "name": "HTTP Request Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "name": "SWITCHING",
+              "value1": "={{ $json.findings.language_switching_detected }}",
+              "operation": "equal",
+              "value2": true
+            },
+            {
+              "name": "SAME_LANGUAGE",
+              "value1": "={{ $json.findings.language_switching_detected }}",
+              "operation": "equal",
+              "value2": false
+            }
+          ]
+        },
+        "fallbackOutput": "none"
+      },
+      "id": "node-switch-crosslang",
+      "name": "Switch Language Switching",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "escalationNote",
+              "value": "={{ 'Language switch detected (' + $json.findings.enrolled_language + ' -> ' + $json.findings.current_language + '). Recommended action: ' + $json.recommended_action }}"
+            }
+          ],
+          "boolean": []
+        },
+        "options": {}
+      },
+      "id": "node-edit-crosslang",
+      "name": "Edit Fields Escalation Note",
+      "type": "n8n-nodes-base.editFields",
+      "typeVersion": 2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-crosslang-a",
+      "name": "Respond to Webhook (Switching)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-crosslang-b",
+      "name": "Respond to Webhook (Same Language)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 380]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Backend": {
+      "main": [
+        [
+          {
+            "node": "Switch Language Switching",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Language Switching": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields Escalation Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook (Same Language)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields Escalation Note": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (Switching)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

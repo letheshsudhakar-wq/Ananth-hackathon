@@ -1,0 +1,111 @@
+{
+  "name": "ANANTH — Agent 4: Regional Language Intelligence",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "lang-trigger",
+      "name": "Execute Sub-workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n// Supported: en, hi, ta, kn, te, gu\nreturn [{\n  json: {\n    session_id: input.session_id || 'unknown',\n    hint_language: input.hint_language ?? 'en',\n    detected_language: input.detected_language ?? null,\n    confidence: input.confidence ?? null,\n    transcript_text: input.transcript_text ?? null\n  }\n}];"
+      },
+      "id": "lang-prepare",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL }}/v1/n8n/agent/regional-language",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.ANANTH_N8N_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 8000 }
+      },
+      "id": "lang-http",
+      "name": "Call Regional Language API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "lang-cond",
+              "leftValue": "={{ $json.findings.is_supported_regional_language }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ]
+        }
+      },
+      "id": "lang-route",
+      "name": "Language Supported?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "l1", "name": "agent_decision", "value": "PROCEED", "type": "string" },
+            { "id": "l2", "name": "detected_language", "value": "={{ $json.findings.detected_language }}", "type": "string" },
+            { "id": "l3", "name": "language_confidence", "value": "={{ $json.measurements.language_confidence }}", "type": "number" }
+          ]
+        }
+      },
+      "id": "lang-pass",
+      "name": "Output: SUPPORTED LANGUAGE",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "k1", "name": "agent_decision", "value": "CONFIRM_PREFERRED_LANGUAGE", "type": "string" },
+            { "id": "k2", "name": "detected_language", "value": "={{ $json.findings.detected_language }}", "type": "string" },
+            { "id": "k3", "name": "fallback_language", "value": "en", "type": "string" },
+            { "id": "k4", "name": "summary", "value": "={{ $json.findings.summary }}", "type": "string" }
+          ]
+        }
+      },
+      "id": "lang-warn",
+      "name": "Output: UNSUPPORTED — FALLBACK",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Execute Sub-workflow Trigger": { "main": [[{ "node": "Prepare Payload", "type": "main", "index": 0 }]] },
+    "Prepare Payload": { "main": [[{ "node": "Call Regional Language API", "type": "main", "index": 0 }]] },
+    "Call Regional Language API": { "main": [[{ "node": "Language Supported?", "type": "main", "index": 0 }]] },
+    "Language Supported?": {
+      "main": [
+        [{ "node": "Output: SUPPORTED LANGUAGE", "type": "main", "index": 0 }],
+        [{ "node": "Output: UNSUPPORTED — FALLBACK", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "ananth-local" }
+}

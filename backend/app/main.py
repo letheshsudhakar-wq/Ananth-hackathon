@@ -13,9 +13,17 @@ Model loading happens ONCE here — NEVER inside individual request handlers.
 """
 from __future__ import annotations
 
+import sys
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncGenerator
+
+# Ensure the repo root (Member 3 `src` package) is importable when the app is
+# started from the backend directory.
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -111,7 +119,7 @@ def create_application() -> FastAPI:
     app.add_exception_handler(Exception, general_exception_handler)
 
     # ── Routers ───────────────────────────────────────────────────────────
-    from app.api.v1 import health, analysis, enrollment, streaming, alerts
+    from app.api.v1 import health, analysis, enrollment, streaming, alerts, orchestration, agents
 
     # Unversioned health (liveness probe)
     app.include_router(health.router)
@@ -121,6 +129,10 @@ def create_application() -> FastAPI:
     app.include_router(enrollment.router)
     app.include_router(alerts.router)
     app.include_router(streaming.router)
+    app.include_router(orchestration.router)
+
+    # Specialized agentic agents (Phase 2)
+    app.include_router(agents.router)
 
     return app
 

@@ -1,0 +1,141 @@
+{
+  "name": "ANANTH — Agent 2: Acoustic Intelligence",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "acoustic-trigger",
+      "name": "Execute Sub-workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn [{\n  json: {\n    session_id: input.session_id || 'unknown',\n    snr_db: input.snr_db ?? null,\n    noise_dbfs: input.noise_dbfs ?? null,\n    rms_dbfs: input.rms_dbfs ?? null,\n    clipping_percentage: input.clipping_percentage ?? null,\n    audio_file_path: input.audio_file_path ?? null\n  }\n}];"
+      },
+      "id": "acoustic-prepare",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL }}/v1/n8n/agent/acoustic-intelligence",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.ANANTH_N8N_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "acoustic-http",
+      "name": "Call Acoustic Intelligence API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "rightValue": "PASS", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "PASS"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "rightValue": "WARNING", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "WARNING"
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      },
+      "id": "acoustic-switch",
+      "name": "Route by Acoustic Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "agent_decision", "value": "PROCEED", "type": "string" },
+            { "id": "c2", "name": "status", "value": "PASS", "type": "string" }
+          ]
+        }
+      },
+      "id": "acoustic-pass",
+      "name": "Output: PASS",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "d1", "name": "agent_decision", "value": "={{ $json.recommended_action }}", "type": "string" },
+            { "id": "d2", "name": "status", "value": "WARNING", "type": "string" },
+            { "id": "d3", "name": "summary", "value": "={{ $json.findings.summary }}", "type": "string" }
+          ]
+        }
+      },
+      "id": "acoustic-warn",
+      "name": "Output: WARNING",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 350]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "e1", "name": "agent_decision", "value": "REQUEST_FRESH_RECORDING", "type": "string" },
+            { "id": "e2", "name": "status", "value": "ERROR", "type": "string" },
+            { "id": "e3", "name": "error", "value": "={{ $json.error }}", "type": "string" }
+          ]
+        }
+      },
+      "id": "acoustic-error",
+      "name": "Output: ERROR",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 500]
+    }
+  ],
+  "connections": {
+    "Execute Sub-workflow Trigger": { "main": [[{ "node": "Prepare Payload", "type": "main", "index": 0 }]] },
+    "Prepare Payload": { "main": [[{ "node": "Call Acoustic Intelligence API", "type": "main", "index": 0 }]] },
+    "Call Acoustic Intelligence API": { "main": [[{ "node": "Route by Acoustic Status", "type": "main", "index": 0 }]] },
+    "Route by Acoustic Status": {
+      "main": [
+        [{ "node": "Output: PASS", "type": "main", "index": 0 }],
+        [{ "node": "Output: WARNING", "type": "main", "index": 0 }],
+        [{ "node": "Output: ERROR", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "ananth-local" }
+}

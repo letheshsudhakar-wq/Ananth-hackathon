@@ -1,0 +1,103 @@
+{
+  "name": "ANANTH Recovery Agent (Phase 3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth/recovery/generate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-recovery-webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ananth-recovery-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Only deterministic trust facts reach the recovery stage.\nconst body = $json.body || $json;\nif (!body.session_id) {\n  return [{ json: { valid: false, status: 'ERROR', error: 'VALIDATION_ERROR', message: 'session_id is mandatory' } }];\n}\nreturn [{ json: { valid: true, session_id: String(body.session_id), verification_status: body.verification_status || null, decision: body.decision || null, session_state: body.session_state || null, reason_codes: Array.isArray(body.reason_codes) ? body.reason_codes : [], recovery_action: body.recovery_action || null, agent_findings: body.agent_findings || {}, preferred_language: body.preferred_language || 'en', use_gemini: body.use_gemini !== false } }];"
+      },
+      "id": "node-recovery-validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "allSets": false },
+          "conditions": [
+            { "value1": "={{ $json.valid }}", "operation": "equal", "value2": true }
+          ]
+        }
+      },
+      "id": "node-recovery-if",
+      "name": "IF Valid Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 400 }
+      },
+      "id": "node-recovery-respond-invalid",
+      "name": "Respond Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://127.0.0.1:8000' }}/v1/n8n/recovery",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.N8N_BRIDGE_SECRET || '' }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 20000 }
+      },
+      "id": "node-recovery-http",
+      "name": "Gemini Recovery",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "node-recovery-respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Validate Input", "type": "main", "index": 0 }]] },
+    "Validate Input": { "main": [[{ "node": "IF Valid Request", "type": "main", "index": 0 }]] },
+    "IF Valid Request": {
+      "main": [
+        [{ "node": "Gemini Recovery", "type": "main", "index": 0 }],
+        [{ "node": "Respond Invalid", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini Recovery": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": true,
+  "settings": { "executionOrder": "v1" }
+}

@@ -1,0 +1,122 @@
+{
+  "name": "ANANTH — Agent 1: Speech Sufficiency",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "speech-trigger",
+      "name": "Execute Sub-workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nreturn [{\n  json: {\n    session_id: input.session_id || 'unknown',\n    duration_seconds: input.duration_seconds ?? null,\n    estimated_speech_seconds: input.estimated_speech_seconds ?? null,\n    silence_percentage: input.silence_percentage ?? null,\n    accumulate: input.accumulate !== false,\n    audio_file_path: input.audio_file_path ?? null\n  }\n}];"
+      },
+      "id": "speech-prepare",
+      "name": "Prepare Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL }}/v1/n8n/agent/speech-sufficiency",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{ $env.ANANTH_N8N_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "session_id", "value": "={{ $json.session_id }}" },
+            { "name": "duration_seconds", "value": "={{ $json.duration_seconds }}" },
+            { "name": "estimated_speech_seconds", "value": "={{ $json.estimated_speech_seconds }}" },
+            { "name": "accumulate", "value": "={{ $json.accumulate }}" }
+          ]
+        },
+        "options": { "timeout": 10000 }
+      },
+      "id": "speech-http",
+      "name": "Call Speech Sufficiency API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "id": "cond-speech-pass",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "PASS",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "speech-route",
+      "name": "Speech Sufficient?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "agent_decision", "value": "PROCEED", "type": "string" },
+            { "id": "a2", "name": "agent_name", "value": "={{ $json.agent_name }}", "type": "string" },
+            { "id": "a3", "name": "session_id", "value": "={{ $json.session_id }}", "type": "string" },
+            { "id": "a4", "name": "status", "value": "={{ $json.status }}", "type": "string" },
+            { "id": "a5", "name": "confidence", "value": "={{ $json.confidence }}", "type": "number" }
+          ]
+        }
+      },
+      "id": "speech-pass-out",
+      "name": "Output: PASS",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "b1", "name": "agent_decision", "value": "COLLECT_ADDITIONAL_SPEECH", "type": "string" },
+            { "id": "b2", "name": "agent_name", "value": "={{ $json.agent_name }}", "type": "string" },
+            { "id": "b3", "name": "session_id", "value": "={{ $json.session_id }}", "type": "string" },
+            { "id": "b4", "name": "status", "value": "={{ $json.status }}", "type": "string" },
+            { "id": "b5", "name": "deficit_seconds", "value": "={{ $json.findings.deficit_seconds }}", "type": "number" }
+          ]
+        }
+      },
+      "id": "speech-warn-out",
+      "name": "Output: COLLECT MORE",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Execute Sub-workflow Trigger": { "main": [[{ "node": "Prepare Payload", "type": "main", "index": 0 }]] },
+    "Prepare Payload": { "main": [[{ "node": "Call Speech Sufficiency API", "type": "main", "index": 0 }]] },
+    "Call Speech Sufficiency API": { "main": [[{ "node": "Speech Sufficient?", "type": "main", "index": 0 }]] },
+    "Speech Sufficient?": {
+      "main": [
+        [{ "node": "Output: PASS", "type": "main", "index": 0 }],
+        [{ "node": "Output: COLLECT MORE", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "ananth-local" }
+}

@@ -1,0 +1,230 @@
+{
+  "name": "ANANTH Agent 3 - Network Resilience",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ananth/agent/network_resilience",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-ws-network",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "ananth-agent-network-resilience"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate the Network Resilience request before routing to the Python backend.\nconst body = $json.body || $json;\nif (!body.session_id) {\n  return [{ json: { status: 'ERROR', error: 'VALIDATION_ERROR', message: 'session_id is mandatory', agent_name: 'network_resilience_agent' } }];\n}\nreturn [{\n  json: {\n    session_id: String(body.session_id),\n    sample_rate: body.sample_rate ? Number(body.sample_rate) : null,\n    webrtc_stats: body.webrtc_stats || null,\n    audio_path: body.audio_path || null\n  }\n}];"
+      },
+      "id": "node-validate-network",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ANANTH_BACKEND_URL || 'http://localhost:8000' }}/v1/agents/network_resilience",
+        "authentication": "headerAuth",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "ananth-agent-secret",
+            "name": "ANANTH Agent Secret"
+          }
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-http-network",
+      "name": "HTTP Request Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "name": "RETRY_RECOMMENDED",
+              "value1": "={{ $json.findings.recoverability_status }}",
+              "operation": "equal",
+              "value2": "RETRY_RECOMMENDED"
+            },
+            {
+              "name": "DEGRADED",
+              "value1": "={{ $json.findings.recoverability_status }}",
+              "operation": "equal",
+              "value2": "DEGRADED"
+            },
+            {
+              "name": "ERROR",
+              "value1": "={{ $json.status }}",
+              "operation": "equal",
+              "value2": "ERROR"
+            }
+          ]
+        },
+        "fallbackOutput": "none"
+      },
+      "id": "node-switch-network",
+      "name": "Switch Recoverability",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "recoveryNote",
+              "value": "={{ $json.findings.summary || 'Recording integrity check completed.' }}"
+            }
+          ],
+          "boolean": []
+        },
+        "options": {}
+      },
+      "id": "node-edit-network",
+      "name": "Edit Fields Recoverability Note",
+      "type": "n8n-nodes-base.editFields",
+      "typeVersion": 2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-network-retry",
+      "name": "Respond to Webhook (Retry)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-network-degraded",
+      "name": "Respond to Webhook (Degraded)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "node-respond-network-error",
+      "name": "Respond to Webhook (Error)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Backend": {
+      "main": [
+        [
+          {
+            "node": "Switch Recoverability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Recoverability": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (Retry)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields Recoverability Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields Recoverability Note": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook (Degraded)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
