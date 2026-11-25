@@ -111,3 +111,22 @@ class EnrolledSpeaker(Base):
 
     def __repr__(self) -> str:
         return f"<EnrolledSpeaker speaker_id={self.speaker_id} name={self.display_name}>"
+
+
+class UserProfile(Base):
+    """Local application profile used by the existing single-user frontend."""
+
+    __tablename__ = "user_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    full_name: Mapped[str] = mapped_column(String(256), nullable=False, default="Ananth")
+    email: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    role: Mapped[str] = mapped_column(String(128), nullable=False, default="Security Analyst")
+    organization: Mapped[str] = mapped_column(String(64), nullable=False, default="enterprise")
+    phone: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now_utc
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now_utc, onupdate=_now_utc
+    )

@@ -205,6 +205,34 @@ export interface HealthResponse {
   device?: string | null;
 }
 
+export interface ProfileResponse {
+  id: number;
+  full_name: string;
+  email: string;
+  role: string;
+  organization: string;
+  phone: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AnalyticsResponse {
+  days: number;
+  from_ts: string;
+  to_ts: string;
+  total: number;
+  safe_rate: number;
+  threat_rate: number;
+  confidence: number;
+  average_time_seconds: number;
+  trend: Array<{
+    day: string;
+    safe: number;
+    threat: number;
+    activity: number;
+  }>;
+}
+
 // ── UI State ─────────────────────────────────────────────────────────
 export type WSStatus =
   | 'idle'

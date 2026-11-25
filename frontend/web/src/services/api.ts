@@ -13,6 +13,8 @@ import type {
   CallContext,
   OrgType,
   FusionMask,
+  ProfileResponse,
+  AnalyticsResponse,
 } from '@/types';
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
@@ -106,6 +108,7 @@ export async function analyzeCall(
 // ── Alerts ────────────────────────────────────────────────────────────
 export interface AlertsFilter {
   organization?: string;
+  flagged?: boolean;
   severity?: string;
   from_ts?: string;
   to_ts?: string;
@@ -185,6 +188,49 @@ export async function analyzeWithDetectif(
       { timeout: 300000 }
     );
 
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
+  }
+}
+
+export async function getProfile(): Promise<ProfileResponse> {
+  try {
+    const res = await apiClient.get<ProfileResponse>('/v1/profile');
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
+  }
+}
+
+export async function updateProfile(
+  profile: Omit<ProfileResponse, 'id' | 'created_at' | 'updated_at'>
+): Promise<ProfileResponse> {
+  try {
+    const res = await apiClient.put<ProfileResponse>('/v1/profile', profile);
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
+  }
+}
+
+export async function getAnalytics(
+  days: number,
+  organization?: string
+): Promise<AnalyticsResponse> {
+  try {
+    const res = await apiClient.get<AnalyticsResponse>('/v1/analytics', {
+      params: { days, organization },
+    });
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
+  }
+}
+
+export async function listSpeakers(): Promise<SpeakerProfile[]> {
+  try {
+    const res = await apiClient.get<SpeakerProfile[]>('/v1/enroll');
     return res.data;
   } catch (err) {
     throw normalizeError(err);

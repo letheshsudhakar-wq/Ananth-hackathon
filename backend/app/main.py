@@ -112,7 +112,7 @@ def create_application() -> FastAPI:
     app.add_exception_handler(Exception, general_exception_handler)
 
     # ── Routers ───────────────────────────────────────────────────────────
-    from app.api.v1 import health, analysis, enrollment, streaming, alerts
+    from app.api.v1 import health, analysis, enrollment, streaming, alerts, profile, analytics
 
     # Unversioned health (liveness probe)
     app.include_router(health.router)
@@ -123,6 +123,8 @@ def create_application() -> FastAPI:
     app.include_router(alerts.router)
     app.include_router(streaming.router)
     app.include_router(detectif.router)
+    app.include_router(profile.router)
+    app.include_router(analytics.router)
 
     return app
 

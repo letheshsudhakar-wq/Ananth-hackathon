@@ -34,7 +34,7 @@ const TOOLS: ToolCard[] = [
   {
     to: '/live-call',
     title: 'Live Monitor',
-    description: 'Stream your microphone and score every chunk in real time. Best for live-call demos.',
+    description: 'Stream your microphone and score every chunk in real time.',
     cta: 'Start monitoring',
     icon: Radio,
     accent: 'rgb(var(--risk-high))',

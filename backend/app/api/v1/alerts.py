@@ -30,6 +30,7 @@ _evidence_svc = EvidenceService()
 )
 async def list_alerts(
     organization: Optional[str] = Query(None, description="Filter by organization."),
+    flagged: Optional[bool] = Query(None, description="Filter flagged evidence."),
     severity: Optional[str] = Query(
         None, description="Filter by severity: low | medium | high | critical."
     ),
@@ -42,6 +43,7 @@ async def list_alerts(
     records, total = await _evidence_svc.list_alerts(
         session=session,
         organization=organization,
+        flagged=flagged,
         severity=severity,
         from_ts=from_ts,
         to_ts=to_ts,

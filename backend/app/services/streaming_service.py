@@ -279,34 +279,38 @@ class StreamingSession:
         chunk_idx = self._chunk_index
         self._chunk_index += 1
 
-        # Accumulate WebM/Opus stream. The browser's MediaRecorder sends one long
-        # WebM container split into chunks; the header is only in the first chunk,
-        # so individual chunks are NOT self-decodable. We buffer the whole stream
-        # and decode it as one unit each time.
-        self._webm_buffer += chunk_bytes
-        del chunk_bytes
+        # WAV chunks can be sent directly by clients and tests.
+        if chunk_bytes.startswith(b"RIFF") and b"WAVE" in chunk_bytes[:12]:
+            wav_bytes = bytes(chunk_bytes)
+        else:
+            # Accumulate WebM/Opus stream. The browser's MediaRecorder sends one long
+            # WebM container split into chunks; the header is only in the first chunk,
+            # so individual chunks are NOT self-decodable. We buffer the whole stream
+            # and decode it as one unit each time.
+            self._webm_buffer += chunk_bytes
+            del chunk_bytes
 
-        # Bound memory: if the accumulated WebM grows too large (≈30+ min of audio),
-        # clear it so we never hold unbounded audio. Context resets.
-        if len(self._webm_buffer) > self._max_webm:
-            logger.warning("WebM buffer exceeded cap; resetting accumulation")
-            self._webm_buffer = bytearray()
-            await self._send_error(
-                "BUFFER_RESET", "Decode buffer reset (long-running stream)."
-            )
-            return
+            # Bound memory: if the accumulated WebM grows too large (≈30+ min of audio),
+            # clear it so we never hold unbounded audio. Context resets.
+            if len(self._webm_buffer) > self._max_webm:
+                logger.warning("WebM buffer exceeded cap; resetting accumulation")
+                self._webm_buffer = bytearray()
+                await self._send_error(
+                    "BUFFER_RESET", "Decode buffer reset (long-running stream)."
+                )
+                return
 
-        try:
-            wav_bytes = await asyncio.get_running_loop().run_in_executor(
-                None,
-                _webm_opus_to_wav_pcm,
-                bytes(self._webm_buffer),
-            )
-        except Exception as exc:
-            await self._send_error(
-                "AUDIO_DECODE_ERROR", f"Failed to decode audio: {type(exc).__name__}"
-            )
-            return
+            try:
+                wav_bytes = await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    _webm_opus_to_wav_pcm,
+                    bytes(self._webm_buffer),
+                )
+            except Exception as exc:
+                await self._send_error(
+                    "AUDIO_DECODE_ERROR", f"Failed to decode audio: {type(exc).__name__}"
+                )
+                return
 
         # Analyse only the newest analysis window, not the whole accumulated
         # conversation. Keeps inference constant-time (fast, reactive updates)

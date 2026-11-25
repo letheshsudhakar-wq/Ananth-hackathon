@@ -1,20 +1,29 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, Mic, Link2, Trash2, Play, Square, RotateCcw } from 'lucide-react';
+import { UploadCloud, Mic, Trash2, Play, Square, RotateCcw, Loader2 } from 'lucide-react';
+import { analyzeCall } from '@/services/api';
+import { useOrganization } from '@/context/OrganizationContext';
+import { useSignalSettings } from '@/context/SignalSettingsContext';
 
-type Tab = 'upload' | 'record' | 'link';
+type Tab = 'upload' | 'record';
 
 export function VoiceVerification() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [recordedUrl, setRecordedUrl] = useState('');
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [speakerId, setSpeakerId] = useState('');
+  const [referenceId, setReferenceId] = useState('');
+  const [country, setCountry] = useState('');
+  const [language, setLanguage] = useState('');
+  const { org } = useOrganization();
+  const { fusion } = useSignalSettings();
 
   useEffect(() => {
     if (!recording) return;
@@ -48,24 +57,46 @@ export function VoiceVerification() {
     setRecording(false);
   };
 
-  const verify = () => {
+  const verify = async () => {
     if (tab === 'upload' && !file) return setError('Please upload an audio file.');
     if (tab === 'record' && !recordedUrl) return setError('Please record audio before verification.');
-    if (tab === 'link') {
-      try { if (!url) throw new Error(); new URL(url); } catch { return setError('Enter a valid audio URL.'); }
+    setLoading(true);
+    setError('');
+    try {
+      let audioFile: File;
+      if (tab === 'upload' && file) {
+        audioFile = file;
+      } else {
+        const response = await fetch(recordedUrl);
+        const blob = await response.blob();
+        audioFile = new File([blob], 'microphone-recording.webm', { type: blob.type || 'audio/webm' });
+      }
+      const result = await analyzeCall(audioFile, org, {
+        first_time_contact: false,
+        high_value: false,
+        odd_hour: false,
+        sensitive_data_request: false,
+        enrolled_speaker_id: speakerId || null,
+      }, fusion);
+      sessionStorage.setItem('ananth-verification-source', tab === 'upload' ? audioFile.name : 'Microphone recording');
+      sessionStorage.setItem('ananth-verification-result', JSON.stringify(result));
+      sessionStorage.setItem('ananth-verification-details', JSON.stringify({ referenceId, country, language, speakerId }));
+      navigate('/audio-intelligence');
+    } catch (err: any) {
+      setError(err?.message || 'Voice verification failed.');
+    } finally {
+      setLoading(false);
     }
-    sessionStorage.setItem('ananth-verification-source', tab === 'upload' ? file?.name || 'Uploaded audio' : tab === 'record' ? 'Microphone recording' : url);
-    navigate('/audio-intelligence');
   };
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
-      <div><h1 className="text-xl font-semibold">Voice Verification</h1><p className="text-sm text-[rgb(var(--text-muted))] mt-1">Upload, record or link an audio sample for demo analysis.</p></div>
+      <div><h1 className="text-xl font-semibold">Voice Verification</h1><p className="text-sm text-[rgb(var(--text-muted))] mt-1">Upload or record audio for backend voice analysis.</p></div>
       {error && <div className="rounded-lg border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</div>}
       <div className="grid lg:grid-cols-[1fr_280px] gap-5">
         <section className="card">
           <div className="flex gap-2 border-b border-[rgb(var(--border-subtle))] pb-3">
-            {([['upload', UploadCloud, 'Upload Audio'], ['record', Mic, 'Record Audio'], ['link', Link2, 'Audio Link']] as const).map(([value, Icon, label]) =>
+            {([['upload', UploadCloud, 'Upload Audio'], ['record', Mic, 'Record Audio']] as const).map(([value, Icon, label]) =>
               <button key={value} onClick={() => setTab(value)} className={`px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${tab === value ? 'bg-violet-600 text-white' : 'text-[rgb(var(--text-secondary))] hover:bg-[var(--hover-bg)]'}`}><Icon className="w-4 h-4" />{label}</button>)}
           </div>
           <div className="pt-5">
@@ -77,12 +108,22 @@ export function VoiceVerification() {
               <div className="font-mono text-lg mt-4">00:{seconds.toString().padStart(2, '0')}</div>
               <div className="flex gap-2 mt-4">{recording ? <button onClick={stopRecording} className="btn btn-danger"><Square className="w-4 h-4" />Stop</button> : <button onClick={startRecording} className="btn btn-primary"><Mic className="w-4 h-4" />Start Recording</button>}{recordedUrl && !recording && <><audio controls src={recordedUrl} /><button onClick={() => setRecordedUrl('')} className="btn btn-ghost"><RotateCcw className="w-4 h-4" /></button></>}</div>
             </div>}
-            {tab === 'link' && <div className="h-64 flex flex-col items-center justify-center"><Link2 className="w-10 h-10 text-violet-400 mb-4" /><input className="input max-w-xl" placeholder="https://example.com/voice.mp3" value={url} onChange={(e) => setUrl(e.target.value)} /></div>}
           </div>
         </section>
-        <aside className="card h-fit"><h2 className="font-semibold mb-4">Recording Details</h2><div className="space-y-3">{['Reference ID', 'Country', 'Language', 'Speaker ID (optional)'].map((label) => <label key={label} className="block text-xs text-[rgb(var(--text-muted))]">{label}<input className="input mt-1.5" placeholder={label.includes('Reference') ? 'REF-2026-001' : ''} /></label>)}</div></aside>
+        <aside className="card h-fit">
+          <h2 className="font-semibold mb-4">Recording Details</h2>
+          <div className="space-y-3">
+            <label className="block text-xs text-[rgb(var(--text-muted))]">Reference ID<input className="input mt-1.5" value={referenceId} onChange={(e)=>setReferenceId(e.target.value)} placeholder="REF-2026-001" /></label>
+            <label className="block text-xs text-[rgb(var(--text-muted))]">Country<input className="input mt-1.5" value={country} onChange={(e)=>setCountry(e.target.value)} /></label>
+            <label className="block text-xs text-[rgb(var(--text-muted))]">Language<input className="input mt-1.5" value={language} onChange={(e)=>setLanguage(e.target.value)} /></label>
+            <label className="block text-xs text-[rgb(var(--text-muted))]">Speaker ID (optional)<input className="input mt-1.5" value={speakerId} onChange={(e)=>setSpeakerId(e.target.value)} /></label>
+          </div>
+        </aside>
       </div>
-      <button onClick={verify} className="btn btn-primary btn-lg w-full sm:w-auto"><Play className="w-4 h-4" />Verify Voice</button>
+      <button onClick={verify} disabled={loading} className="btn btn-primary btn-lg w-full sm:w-auto">
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+        {loading ? 'Verifying...' : 'Verify Voice'}
+      </button>
     </div>
   );
 }

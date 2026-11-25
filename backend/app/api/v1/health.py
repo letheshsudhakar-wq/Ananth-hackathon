@@ -60,7 +60,8 @@ async def v1_health(request: Request) -> HealthResponse:
         svc = getattr(request.app.state, "ml_service", None)
         if svc is not None:
             ml_status = "ok" if svc.is_available else "unavailable"
-            model_source = getattr(svc, "model_source", None)
+            candidate_source = getattr(svc, "model_source", None)
+            model_source = candidate_source if isinstance(candidate_source, str) else None
 
     return HealthResponse(
         status="ok",

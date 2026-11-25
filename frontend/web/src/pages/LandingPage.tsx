@@ -7,8 +7,8 @@ const features = [
   [ScanLine, 'Real-Time Verification', 'Analyze voice confidence in a guided workflow.'],
   [AudioLines, 'Audio Intelligence', 'Review quality, noise, clipping and format signals.'],
   [ShieldCheck, 'Speaker Authentication', 'Compare recordings with trusted speaker profiles.'],
-  [Globe2, 'Threat Intelligence', 'Explore simulated patterns from emerging voice scams.'],
-  [LockKeyhole, 'Secure Processing', 'Keep demo recordings private and out of storage.'],
+  [Globe2, 'Threat Intelligence', 'Review persisted patterns from flagged voice detections.'],
+  [LockKeyhole, 'Secure Processing', 'Raw recordings are discarded after analysis.'],
 ] as const;
 
 export function LandingPage() {
@@ -62,8 +62,8 @@ export function LandingPage() {
 
       <section id="how" className="border-y border-slate-800/70 bg-slate-950/40">
         <div className="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-8">
-          {['Upload or record audio', 'Run demo verification', 'Review the insight report'].map((step, i) => (
-            <div key={step} className="flex gap-4"><span className="w-9 h-9 rounded-full bg-violet-600/30 border border-violet-400/40 flex items-center justify-center text-violet-300 font-bold">{i + 1}</span><div><h3 className="font-semibold">{step}</h3><p className="text-sm text-slate-400 mt-1">{['Provide a voice sample.', 'The guided frontend simulates analysis.', 'Explore the downloadable demo result.'][i]}</p></div></div>
+          {['Upload or record audio', 'Run backend verification', 'Review the analysis report'].map((step, i) => (
+            <div key={step} className="flex gap-4"><span className="w-9 h-9 rounded-full bg-violet-600/30 border border-violet-400/40 flex items-center justify-center text-violet-300 font-bold">{i + 1}</span><div><h3 className="font-semibold">{step}</h3><p className="text-sm text-slate-400 mt-1">{['Provide a voice sample.', 'The backend processes the audio with the configured ML service.', 'Explore the persisted risk and recommendation result.'][i]}</p></div></div>
           ))}
         </div>
       </section>
